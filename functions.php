@@ -2436,3 +2436,80 @@ function nexv_hero_slides() {
         ['src' => $u . 'airpods.jpg',    'name' => 'AirPods',    'bg' => '#e3e3e3', 'wide' => true],
     ];
 }
+
+/* =========================================================================
+ * به‌روزرسانیِ قالب از گیت‌هاب با یک کلیک (NEXV ← به‌روزرسانی قالب)
+ * ========================================================================= */
+define('NEXV_UPDATE_REPO', 'git-nexv/site-apple');
+define('NEXV_UPDATE_BRANCH', 'main');
+
+add_action('admin_menu', function () {
+    add_submenu_page('nexv-dashboard', 'به‌روزرسانی قالب', 'به‌روزرسانی قالب', 'manage_options', 'nexv-theme-update', 'nexv_theme_update_page_html');
+}, 10);
+
+function nexv_theme_update_page_html() {
+    $token = get_option('nexv_github_token', '');
+    ?>
+    <div class="wrap">
+        <h1>به‌روزرسانی قالب</h1>
+        <?php if (isset($_GET['updated'])): ?>
+            <div class="notice notice-success"><p>قالب با موفقیت به آخرین نسخه به‌روز شد.</p></div>
+        <?php elseif (!empty($_GET['error'])): ?>
+            <div class="notice notice-error"><p>خطا در به‌روزرسانی: <?php echo esc_html(wp_unslash($_GET['error'])); ?></p></div>
+        <?php endif; ?>
+        <p>با زدن دکمه‌ی زیر، آخرین نسخه‌ی قالب از گیت‌هاب (<code><?php echo esc_html(NEXV_UPDATE_REPO . ' / ' . NEXV_UPDATE_BRANCH); ?></code>) دانلود و جایگزین فایل‌های فعلی می‌شه.</p>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <input type="hidden" name="action" value="nexv_theme_update">
+            <?php wp_nonce_field('nexv_theme_update'); ?>
+            <p>
+                <label>توکن گیت‌هاب (فقط اگه مخزن خصوصیه):<br>
+                <input type="password" name="token" class="regular-text" value="<?php echo esc_attr($token); ?>" autocomplete="off"></label>
+            </p>
+            <?php submit_button('به‌روزرسانی قالب', 'primary large', 'submit', false); ?>
+        </form>
+    </div>
+    <?php
+}
+
+add_action('admin_post_nexv_theme_update', function () {
+    if (!current_user_can('manage_options')) wp_die('دسترسی غیرمجاز.');
+    check_admin_referer('nexv_theme_update');
+    $back = admin_url('admin.php?page=nexv-theme-update');
+    $fail = function ($msg) use ($back) { wp_redirect(add_query_arg('error', rawurlencode($msg), $back)); exit; };
+
+    $token = trim(sanitize_text_field(wp_unslash($_POST['token'] ?? '')));
+    update_option('nexv_github_token', $token, false);
+
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    WP_Filesystem();
+
+    $headers = ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'nexv-theme-updater'];
+    if ($token !== '') $headers['Authorization'] = 'Bearer ' . $token;
+    $res = wp_remote_get('https://api.github.com/repos/' . NEXV_UPDATE_REPO . '/zipball/' . NEXV_UPDATE_BRANCH, ['headers' => $headers, 'timeout' => 120]);
+    if (is_wp_error($res)) $fail($res->get_error_message());
+    $code = wp_remote_retrieve_response_code($res);
+    if ($code !== 200) $fail('پاسخ گیت‌هاب ' . $code . ($code == 404 ? ' (اگه مخزن خصوصیه، توکن رو وارد کن)' : ''));
+
+    $zip = wp_tempnam('nexv-theme.zip');
+    file_put_contents($zip, wp_remote_retrieve_body($res));
+    $tmp = trailingslashit(get_temp_dir()) . 'nexv-theme-' . wp_generate_password(8, false);
+    $un = unzip_file($zip, $tmp);
+    @unlink($zip);
+    if (is_wp_error($un)) $fail($un->get_error_message());
+
+    $dirs = glob($tmp . '/*', GLOB_ONLYDIR);
+    if (empty($dirs) || !file_exists($dirs[0] . '/style.css')) { global $wp_filesystem; $wp_filesystem->delete($tmp, true); $fail('فایل‌های قالب در بسته پیدا نشد.'); }
+    $src = $dirs[0];
+    global $wp_filesystem;
+    $wp_filesystem->delete($src . '/.github', true);
+    $wp_filesystem->delete($src . '/README.md');
+    $copied = copy_dir($src, get_stylesheet_directory());
+    $wp_filesystem->delete($tmp, true);
+    if (is_wp_error($copied)) $fail($copied->get_error_message());
+
+    delete_transient('nexv_products_cache_v2');
+    delete_transient('nexv_categories_cache_v1');
+    if (function_exists('opcache_reset')) @opcache_reset();
+    wp_redirect(add_query_arg('updated', '1', $back));
+    exit;
+});
