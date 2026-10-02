@@ -2521,15 +2521,25 @@ function applyAdvancedFilter(){
    باشه، آدرس بالای مرورگر بدون رفرش صفحه به همون پیوند تغییر می‌کنه؛ این‌طوری هم
    تجربه‌ی سریع و بی‌رفرش حفظ می‌شه، هم آدرس صفحه دقیقاً همون پیوند یکتای سئوشده‌ست
    (برای اشتراک‌گذاری، بوکمارک، و اگه صفحه رفرش بشه هم درست لود می‌شه). */
-function updateUrlForSelectedCategory(){
-  if(!window.history || !window.history.pushState) return;
-  if(!selectedCatPath.length){
-    if(HOME_URL) history.pushState({}, '', HOME_URL);
-    return;
-  }
+function samePath(a, b){
+  try{
+    const x = new URL(a, location.origin), y = new URL(b, location.origin);
+    const n = u => decodeURI(u.pathname).replace(/\/+$/, '') + u.search;
+    return n(x) === n(y);
+  }catch(_){ return a === b; }
+}
+/* آدرس بالای مرورگر رو هم‌گام با چیزی که روی صفحه نشون داده می‌شه نگه می‌داره؛
+   اگه آدرس همونی باشه که الان هست، ورودیِ تکراری توی تاریخچه ساخته نمی‌شه. */
+function setUrl(url, replace){
+  if(!url || !window.history || !window.history.pushState) return;
+  if(samePath(url, location.href)) return;
+  try{ replace ? history.replaceState({}, '', url) : history.pushState({}, '', url); }catch(_){}
+}
+function updateUrlForSelectedCategory(replace){
+  if(!selectedCatPath.length){ setUrl(HOME_URL, replace); return; }
   const slug = selectedCatPath[selectedCatPath.length - 1];
   const cat = CATS.find(c => c.slug === slug);
-  if(cat && cat.url){ history.pushState({}, '', cat.url); }
+  setUrl(cat && cat.url ? cat.url : HOME_URL, replace);
 }
 
 document.getElementById('advFilterApply')?.addEventListener('click', ()=>{
@@ -2545,7 +2555,8 @@ document.getElementById('advFilterApply')?.addEventListener('click', ()=>{
 
 /* از سرچ یا از صفحه‌ی یک محصول به یک دسته‌بندی خاص می‌ره (روی صفحه‌ی اصلی فیلتر می‌کنه،
    روی صفحه‌ی اختصاصی محصول به صفحه‌ی اصلی هدایت می‌شه). */
-function goToCategory(slug){
+function goToCategory(slug, opts){
+  opts = opts || {};
   if(SINGLE_VIEW_ID){
     const sep = HOME_URL.includes('?') ? '&' : '?';
     window.location.href = HOME_URL + sep + 'nexv_cat=' + encodeURIComponent(slug);
@@ -2556,8 +2567,8 @@ function goToCategory(slug){
   selectedCatPath = [slug];
   renderAdvancedFilter();
   applyAdvancedFilter();
-  updateUrlForSelectedCategory();
-  document.getElementById('products')?.scrollIntoView({behavior:'smooth'});
+  if(opts.history !== false) updateUrlForSelectedCategory(!!opts.replace);
+  if(opts.scroll !== false) document.getElementById('products')?.scrollIntoView({behavior:'smooth'});
 }
 
 /* ---------- صفحه‌ی جداگانه‌ی محصولاتِ یک برچسب (مثلاً «پرفروش») ----------
@@ -2589,12 +2600,34 @@ function renderTagView(tag){
   window.scrollTo(0, 0);
 }
 
+/* دکمه‌ی Back/Forward مرورگر: محتوای صفحه دقیقاً با آدرسِ جدید هماهنگ می‌شه */
+window.addEventListener('popstate', ()=>{
+  if(SINGLE_VIEW_ID || TAG_VIEW){ location.reload(); return; }
+  if(typeof CART_URL !== 'undefined' && samePath(location.pathname, CART_URL)) return;
+  const home = new URL(HOME_URL, location.origin);
+  if(samePath(location.pathname, home.pathname)){
+    const q = new URLSearchParams(location.search).get('nexv_search');
+    if(q){ if(searchInput) searchInput.value = q; submitSearch(q, {history:false}); return; }
+    setSearchMode(false);
+    if(searchInput) searchInput.value = '';
+    selectedCatPath = []; priceMin = null; priceMax = null;
+    renderAdvancedFilter();
+    document.querySelectorAll('#quickChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.cat === 'all'));
+    render(pickHomeProducts());
+    renderRecommendations();
+    return;
+  }
+  const cat = CATS.find(c => c.url && samePath(c.url, location.pathname));
+  if(cat){ goToCategory(cat.slug, {history:false}); return; }
+  location.reload();
+});
+
 function applyUrlParams(){
   const params = new URLSearchParams(window.location.search);
   const cat = params.get('nexv_cat');
   const q   = params.get('nexv_search');
   if(cat){
-    goToCategory(cat);
+    goToCategory(cat, {replace:true});
   } else if(q){
     if(searchInput) searchInput.value = q;
     document.querySelectorAll('#quickChips .chip').forEach(c=>c.classList.remove('active'));
@@ -2658,9 +2691,15 @@ function loadProducts(){
       } else if(TAG_VIEW){
         renderTagView(TAG_VIEW);
       } else {
-        const activeChip = document.querySelector('#quickChips .chip.active');
-        const cat = activeChip ? activeChip.dataset.cat : 'all';
-        render(cat === 'all' ? pickHomeProducts() : PRODUCTS.filter(p => (p.cats||[p.cat]).includes(cat)));
+        /* اگه دسته‌بندی‌ها زودتر از محصولات رسیده باشن و صفحه روی پیوندِ یک دسته (یا زیردسته)
+           باز شده باشه، همون دسته دوباره اعمال می‌شه؛ قبلاً اینجا صفحه به حالتِ «همه» برمی‌گشت. */
+        if(selectedCatPath.length){
+          applyAdvancedFilter();
+        }else{
+          const activeChip = document.querySelector('#quickChips .chip.active');
+          const cat = activeChip ? activeChip.dataset.cat : 'all';
+          render(cat === 'all' ? pickHomeProducts() : PRODUCTS.filter(p => (p.cats||[p.cat]).includes(cat)));
+        }
         renderRecommendations();
         applyUrlParams();
       }
@@ -2681,7 +2720,7 @@ fetch(window.NEXV_API_URL + '?action=categories').then(r => r.json()).then(data 
     /* اگه از پیوند یکتای خودِ یک دسته‌بندی وارد شده (برای سئو بهتر)، همون لحظه
        محصولات همون دسته فیلتر و نمایش داده می‌شن. */
     if(window.NEXV_CAT_SLUG && !SINGLE_VIEW_ID){
-      goToCategory(window.NEXV_CAT_SLUG);
+      goToCategory(window.NEXV_CAT_SLUG, {history:false});
     }
   }
 }).catch(()=>{ /* بک‌اند در دسترس نیست */ });
@@ -2919,7 +2958,7 @@ function submitSearch(q){
   if(!q) return;
   saveSearchTerm(q);
   renderSearchResults([], '');
-  if(SINGLE_VIEW_ID){
+  if(SINGLE_VIEW_ID || TAG_VIEW){
     const sep = HOME_URL.includes('?') ? '&' : '?';
     window.location.href = HOME_URL + sep + 'nexv_search=' + encodeURIComponent(q);
     return;
@@ -2935,6 +2974,10 @@ function submitSearch(q){
   const recoBox = document.getElementById('recoRow');
   if(recoBox) recoBox.innerHTML = '';
   renderSearchModelReco(matches);
+  if(!(arguments[1] && arguments[1].history === false)){
+    const u = new URL(HOME_URL, location.origin); u.searchParams.set('nexv_search', q);
+    setUrl(u.toString());
+  }
   document.getElementById('products')?.scrollIntoView({behavior:'smooth'});
 }
 
@@ -2984,6 +3027,7 @@ searchInput.addEventListener('input', ()=>{
     if(searchReco) searchReco.innerHTML = '';
     render(pickHomeProducts());
     renderRecommendations();
+    if(new URLSearchParams(location.search).has('nexv_search')) setUrl(HOME_URL, true);
   }
   renderSearchResults(matchCategories(q), q);
 });
