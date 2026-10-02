@@ -3138,8 +3138,19 @@ updateCartUI();
 /* Drawer open/close */
 const drawer = document.getElementById('cartDrawer');
 const drawerOverlay = document.getElementById('drawerOverlay');
-function openDrawer(){ drawer.classList.add('open'); drawerOverlay.classList.add('open'); lockBodyScroll(); }
-function closeDrawer(){ drawer.classList.remove('open'); drawerOverlay.classList.remove('open'); unlockBodyScroll(); }
+/* سبد خرید آدرسِ اختصاصیِ خودش (/cart/) رو داره: با باز شدن، آدرس عوض می‌شه و با بستن برمی‌گرده */
+const CART_URL = new URL('cart/', new URL(HOME_URL, location.origin)).pathname;
+let cartPrevUrl = null;
+function openDrawer(){
+  drawer.classList.add('open'); drawerOverlay.classList.add('open'); lockBodyScroll();
+  try{ if(location.pathname !== CART_URL){ cartPrevUrl = location.href; history.pushState({nexvCart:1}, '', CART_URL); } }catch(_){}
+}
+function closeDrawer(){
+  drawer.classList.remove('open'); drawerOverlay.classList.remove('open'); unlockBodyScroll();
+  try{ if(location.pathname === CART_URL) history.replaceState(null, '', cartPrevUrl || HOME_URL); }catch(_){}
+  cartPrevUrl = null;
+}
+window.addEventListener('popstate', ()=>{ if(drawer.classList.contains('open') && location.pathname !== CART_URL){ cartPrevUrl = null; closeDrawer(); } });
 document.getElementById('cartBtn').addEventListener('click', openDrawer);
 document.getElementById('drawerClose').addEventListener('click', closeDrawer);
 drawerOverlay.addEventListener('click', closeDrawer);
@@ -4734,6 +4745,18 @@ if(stage){
       history.replaceState(null, '', u.toString());
     }catch(_){}
   }
+
+  /* ---------- آدرس‌های اختصاصی: /cart/ ، /checkout/ ، /my-account/ ، /shop/ ---------- */
+  (function(){
+    let seg = '';
+    try{
+      const base = new URL(HOME_URL, location.origin).pathname;
+      seg = decodeURIComponent(location.pathname.slice(base.length)).replace(/^\/+|\/+$/g, '');
+    }catch(_){}
+    if(seg === 'cart' || seg === 'checkout'){ openDrawer(); }
+    else if(seg === 'my-account'){ try{ history.replaceState(null, '', HOME_URL); }catch(_){} openAccount(); }
+    else if(seg === 'shop'){ setTimeout(()=> document.getElementById('products')?.scrollIntoView({behavior:'smooth'}), 300); }
+  })();
 
   syncFromState();
 })();

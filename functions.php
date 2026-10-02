@@ -2534,3 +2534,27 @@ add_filter('rank_math/sitemap/urlimages', function ($images, $post_id) {
     }
     return $images;
 }, 20, 2);
+
+/* =========================================================================
+ * صفحه‌های کمکیِ سبد خرید/حساب: در گوگل ایندکس نشن و در سایت‌مپ نباشن؛
+ * «برگه نمونه»ی پیش‌فرض وردپرس هم به صفحه‌ی اصلی ریدایرکت (۳۰۱) می‌شه.
+ * ========================================================================= */
+function nexv_utility_page_slugs() { return ['cart', 'checkout', 'my-account', 'shop']; }
+add_action('template_redirect', function () {
+    if (is_page(['برگه-نمونه', 'sample-page'])) { wp_safe_redirect(home_url('/'), 301); exit; }
+});
+add_filter('wp_robots', function ($robots) {
+    if (is_page(nexv_utility_page_slugs())) { $robots['noindex'] = true; $robots['follow'] = true; unset($robots['index']); }
+    return $robots;
+}, 99);
+add_filter('rank_math/frontend/robots', function ($robots) {
+    if (is_page(nexv_utility_page_slugs())) { $robots['index'] = 'noindex'; $robots['follow'] = 'follow'; }
+    return $robots;
+}, 99);
+add_filter('rank_math/sitemap/entry', function ($url, $type, $object) {
+    if ($type === 'post' && $object instanceof WP_Post && $object->post_type === 'page'
+        && in_array(urldecode($object->post_name), array_merge(nexv_utility_page_slugs(), ['برگه-نمونه', 'sample-page']), true)) {
+        return false;
+    }
+    return $url;
+}, 20, 3);
