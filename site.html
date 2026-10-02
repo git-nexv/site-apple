@@ -3160,6 +3160,22 @@ function variantLabelParts(color, storage, extraVariants){
 
 /* کلیدِ ترکیبِ متغیر، دقیقاً همون‌طور که در پیشخوان ساخته می‌شه:
    [رنگ، حجم، مقدارِ گروه‌ها به ترتیب] با «|~|». جاهای خالی حفظ می‌شن. */
+/* مقایسه‌ی منعطفِ کلیدها: ارقامِ فارسی/لاتین، نیم‌فاصله و نویسه‌های نامرئی، فاصله‌های
+   اضافه و جایگاه‌های خالیِ انتهایی (مثلاً یه گروهِ متغیرِ خالی در پیشخوان) نادیده گرفته می‌شن. */
+function normVariantKey(k){
+  const parts = String(k || '').split('|~|').map(v => String(v)
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[\u200c\u200e\u200f\u00a0]/g, ' ').replace(/ي/g,'ی').replace(/ك/g,'ک').replace(/\s+/g, ' ').trim().toLowerCase());
+  while(parts.length && parts[parts.length - 1] === '') parts.pop();
+  return parts.join('|~|');
+}
+function variantPriceLookup(map, key){
+  if(!map || Array.isArray(map)) return 0;
+  if(Number(map[key]) > 0) return Number(map[key]);
+  const n = normVariantKey(key);
+  for(const k in map){ if(normVariantKey(k) === n && Number(map[k]) > 0) return Number(map[k]); }
+  return 0;
+}
 function variantPriceKey(color, storage, extraVariants){
   return [color || '', storage || '', ...(extraVariants||[]).map(v=>v && v.value ? v.value : '')]
     .map(v => String(v).trim()).join('|~|');
@@ -3181,8 +3197,8 @@ function priceFor(p, color, storage, extraVariants){
   if(!p) return 0;
   const map = p.variantPrices;
   if(map && !Array.isArray(map)){
-    const v = map[variantPriceKey(color, storage, extraVariants)];
-    if(v > 0) return Number(v);
+    const v = variantPriceLookup(map, variantPriceKey(color, storage, extraVariants));
+    if(v > 0) return v;
   }
   return Number(p.price) || 0;
 }
@@ -4526,7 +4542,12 @@ function renderSingleProduct(sp){
     const base = Number(sp.price) || 0;
     if(bestKey === null || (base > 0 && base <= best)) return;
     const parts = bestKey.split('|~|');
-    const setSel = (el, val)=>{ if(el && val && Array.from(el.options).some(o => o.value === val)) el.value = val; };
+    const nv = v => normVariantKey(v);
+    const setSel = (el, val)=>{
+      if(!el || !val) return;
+      const o = Array.from(el.options).find(o => o.value === val || nv(o.value) === nv(val));
+      if(o) el.value = o.value;
+    };
     setSel(document.getElementById('pdColorSelect'), parts[0]);
     setSel(document.getElementById('pdStorageSelect'), parts[1]);
     document.querySelectorAll('[data-variant-group]').forEach((g, i)=> setSel(g.querySelector('.pd-option-select'), parts[2 + i]));

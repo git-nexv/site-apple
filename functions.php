@@ -2051,6 +2051,16 @@ function nexv_variant_key($values) {
     return implode('|~|', $parts);
 }
 
+function nexv_norm_variant_key($k) {
+    $parts = array_map(function ($v) {
+        $v = str_replace(['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹','٠','١','٢','٣','٤','٥','٦','٧','٨','٩'], ['0','1','2','3','4','5','6','7','8','9','0','1','2','3','4','5','6','7','8','9'], (string) $v);
+        $v = str_replace(["\xE2\x80\x8C", "\xE2\x80\x8E", "\xE2\x80\x8F", "\xC2\xA0", 'ي', 'ك'], [' ', ' ', ' ', ' ', 'ی', 'ک'], $v);
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $v)), 'UTF-8');
+    }, explode('|~|', (string) $k));
+    while ($parts && end($parts) === '') array_pop($parts);
+    return implode('|~|', $parts);
+}
+
 function nexv_variant_prices($post_id) {
     $raw = get_post_meta($post_id, '_nexv_variant_prices', true);
     if (!$raw) return [];
@@ -2069,6 +2079,8 @@ function nexv_price_for_variant($post_id, $values) {
     $map = nexv_variant_prices($post_id);
     $key = nexv_variant_key($values);
     if (isset($map[$key])) return (int) $map[$key];
+    $n = nexv_norm_variant_key($key);
+    foreach ($map as $k => $v) { if (nexv_norm_variant_key($k) === $n) return (int) $v; }
     return (int) get_post_meta($post_id, '_nexv_price', true);
 }
 

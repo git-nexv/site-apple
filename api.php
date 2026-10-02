@@ -318,7 +318,10 @@ function nexv_variant_price_from_cart_key($cartKey, $variantPrices) {
     }
     $values = array_merge([$color, $storage], $extras);
     $key = implode('|~|', array_map(function ($v) { return trim((string) $v); }, $values));
-    return isset($variantPrices[$key]) ? (int) $variantPrices[$key] : 0;
+    if (isset($variantPrices[$key])) return (int) $variantPrices[$key];
+    $n = nexv_norm_variant_key($key);
+    foreach ($variantPrices as $k => $v) { if (nexv_norm_variant_key($k) === $n && (int) $v > 0) return (int) $v; }
+    return 0;
 }
 
 function json_fail($msg, $code = 400) {
