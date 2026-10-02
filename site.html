@@ -2585,9 +2585,31 @@ function samePath(a, b){
    اگه آدرس همونی باشه که الان هست، ورودیِ تکراری توی تاریخچه ساخته نمی‌شه. */
 function setUrl(url, replace){
   if(!url || !window.history || !window.history.pushState) return;
-  if(samePath(url, location.href)) return;
+  if(samePath(url, location.href)) { rememberShopUrl(); return; }
   try{ replace ? history.replaceState({}, '', url) : history.pushState({}, '', url); }catch(_){}
+  rememberShopUrl();
 }
+/* آخرین آدرسِ فروشگاه (دسته/سرچِ انتخاب‌شده) ذخیره می‌شه تا «بازگشت به فروشگاه»
+   در صفحه‌ی محصول، مشتری رو به همون فیلتر برگردونه، نه به صفحه‌ی اصلیِ خالی. */
+function rememberShopUrl(){
+  try{ if(!SINGLE_VIEW_ID && !location.pathname.match(/\/cart\/?$/)) sessionStorage.setItem('nexv_shop_url', location.href); }catch(_){}
+}
+function shopReturnUrl(){
+  try{
+    const u = sessionStorage.getItem('nexv_shop_url');
+    if(u && new URL(u).origin === location.origin) return u;
+  }catch(_){}
+  return HOME_URL;
+}
+document.addEventListener('click', e=>{
+  const a = e.target.closest && e.target.closest('#pdBackToShop');
+  if(!a) return;
+  /* اگه از همون صفحه‌ی فروشگاه اومده، با Back مرورگر برمی‌گرده تا جای اسکرول هم حفظ بشه */
+  try{
+    if(document.referrer && samePath(document.referrer, a.href) && history.length > 1){ e.preventDefault(); history.back(); }
+  }catch(_){}
+});
+window.addEventListener('pageshow', ()=>{ try{ rememberShopUrl(); }catch(_){} });
 function updateUrlForSelectedCategory(replace){
   if(!selectedCatPath.length){ setUrl(HOME_URL, replace); return; }
   const slug = selectedCatPath[selectedCatPath.length - 1];
@@ -4380,7 +4402,7 @@ function renderSingleProduct(sp){
 
   const sectionHead = document.querySelector('#products .section-head');
   if(sectionHead){
-    sectionHead.innerHTML = `<a href="${HOME_URL}" class="btn btn-ghost" style="margin-bottom:16px; display:inline-flex;">
+    sectionHead.innerHTML = `<a href="${shopReturnUrl()}" id="pdBackToShop" class="btn btn-ghost" style="margin-bottom:16px; display:inline-flex;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M10 5l-7 7 7 7"/></svg>
       بازگشت به فروشگاه
     </a><h2 class="section-title" style="margin-top:6px;">محصولات مشابه</h2>`;
@@ -4402,8 +4424,8 @@ function renderSingleProduct(sp){
         ${badgesHtml(sp, true)}
         <h1><bdi>${sp.title}</bdi></h1>
         <p class="spec">${sp.spec || ''}</p>
-        <div class="price" id="pdPrice">${sp.price ? fmt(sp.price) + '<small>تومان</small>' : CALL_PRICE_HTML}</div>
-        ${(sp.price && sp.priceUpdated) ? `<div class="pd-price-updated" title="قیمت‌ها بر اساس نرخ روز به‌روزرسانی می‌شن">
+        <div class="price" id="pdPrice">${priceRange(sp).min ? fmt(priceRange(sp).min) + '<small>تومان</small>' : CALL_PRICE_HTML}</div>
+        ${(priceRange(sp).min && sp.priceUpdated) ? `<div class="pd-price-updated" title="قیمت‌ها بر اساس نرخ روز به‌روزرسانی می‌شن">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
           <span>آخرین به‌روزرسانی قیمت: <b>${escHtml(sp.priceUpdated)}</b></span>
           <a href="/terms/" class="pd-price-rules">قوانین قیمت</a>
@@ -4495,6 +4517,20 @@ function renderSingleProduct(sp){
     void pdPriceEl.offsetWidth;                /* ری‌استارتِ انیمیشن */
     pdPriceEl.classList.add('price-changed');
   }
+  /* در شروع، متغیرها روی ارزون‌ترین ترکیبی که قیمت داره تنظیم می‌شن */
+  (function selectCheapestVariant(){
+    const map = (sp.variantPrices && !Array.isArray(sp.variantPrices)) ? sp.variantPrices : null;
+    if(!map) return;
+    let bestKey = null, best = Infinity;
+    Object.keys(map).forEach(k=>{ const v = Number(map[k]); if(v > 0 && v < best){ best = v; bestKey = k; } });
+    const base = Number(sp.price) || 0;
+    if(bestKey === null || (base > 0 && base <= best)) return;
+    const parts = bestKey.split('|~|');
+    const setSel = (el, val)=>{ if(el && val && Array.from(el.options).some(o => o.value === val)) el.value = val; };
+    setSel(document.getElementById('pdColorSelect'), parts[0]);
+    setSel(document.getElementById('pdStorageSelect'), parts[1]);
+    document.querySelectorAll('[data-variant-group]').forEach((g, i)=> setSel(g.querySelector('.pd-option-select'), parts[2 + i]));
+  })();
   document.querySelectorAll('.pd-option-select').forEach(sel=>{
     sel.addEventListener('change', syncVariantPrice);
   });

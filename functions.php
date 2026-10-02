@@ -1923,7 +1923,7 @@ function nexv_save_product_meta($post_id) {
     }
     $vpOld = nexv_variant_prices($post_id);
     update_post_meta($post_id, '_nexv_variant_prices', $vpClean ? wp_json_encode($vpClean, JSON_UNESCAPED_UNICODE) : '');
-    if ($vpClean != $vpOld && (int) get_post_meta($post_id, '_nexv_price', true) > 0) {
+    if ($vpClean != $vpOld && ($vpClean || (int) get_post_meta($post_id, '_nexv_price', true) > 0)) {
         update_post_meta($post_id, '_nexv_price_updated', (int) current_time('timestamp'));
     }
     if (isset($_POST['nexv_gallery'])) {
@@ -2144,8 +2144,12 @@ function nexv_jalali_pretty($ts) {
 
 /* رشته‌ی آماده‌ی نمایش برای کنارِ قیمتِ یک محصول (خالی، اگه قیمت یا تاریخ نباشه). */
 function nexv_price_updated_label($post_id) {
-    if ((int) get_post_meta($post_id, '_nexv_price', true) <= 0) return '';
-    return nexv_jalali_pretty(get_post_meta($post_id, '_nexv_price_updated', true));
+    /* محصولی که فقط قیمتِ متغیرها رو داره (قیمتِ پایه صفره) هم تاریخ می‌گیره */
+    $hasVariant = (bool) nexv_variant_prices($post_id);
+    if ((int) get_post_meta($post_id, '_nexv_price', true) <= 0 && !$hasVariant) return '';
+    $ts = get_post_meta($post_id, '_nexv_price_updated', true);
+    if ($ts === '' && $hasVariant) $ts = (int) get_post_modified_time('U', false, $post_id);
+    return nexv_jalali_pretty($ts);
 }
 
 function nexv_find_cat_in_parent($value, $parentId = 0, $allowGlobalName = true) {
