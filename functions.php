@@ -2513,3 +2513,24 @@ add_action('admin_post_nexv_theme_update', function () {
     wp_redirect(add_query_arg('updated', '1', $back));
     exit;
 });
+
+/* =========================================================================
+ * سایت‌مپ Rank Math: مقالات و دسته‌بندی‌ها هم حتماً داخل سایت‌مپ باشن،
+ * هر سایت‌مپ تا ۱۰۰۰ لینک، و عکس‌های گالریِ محصول هم برای Google Images.
+ * ========================================================================= */
+add_filter('rank_math/sitemap/exclude_post_type', function ($exclude, $type) {
+    return in_array($type, ['nexv_product', 'nexv_article'], true) ? false : $exclude;
+}, 20, 2);
+add_filter('rank_math/sitemap/exclude_taxonomy', function ($exclude, $type) {
+    return $type === 'nexv_cat' ? false : $exclude;
+}, 20, 2);
+add_filter('rank_math/sitemap/entries_per_page', function () { return 1000; });
+add_filter('rank_math/sitemap/urlimages', function ($images, $post_id) {
+    if (get_post_type($post_id) !== 'nexv_product' || !function_exists('nexv_gallery_urls')) return $images;
+    $have = wp_list_pluck((array) $images, 'src');
+    $title = get_the_title($post_id);
+    foreach ((array) nexv_gallery_urls($post_id) as $src) {
+        if ($src && !in_array($src, $have, true)) { $images[] = ['src' => $src, 'title' => $title, 'alt' => $title]; $have[] = $src; }
+    }
+    return $images;
+}, 20, 2);
