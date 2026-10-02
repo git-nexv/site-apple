@@ -241,6 +241,7 @@ function nexv_transliterate_title_to_slug($title) {
     // واژه‌های تکراری/رایج -> معادل انگلیسی (ترتیب مهمه: عبارت‌های بلندتر اول)
     $map = [
         'ال سی دی' => 'lcd', 'السی\u200cدی' => 'lcd', 'ال‌سی‌دی' => 'lcd',
+        'لوازم جانبی' => 'accessories', 'قطعات' => 'parts', 'خرید' => 'buy',
         'مادربرد' => 'motherboard',
         'باتری' => 'battery',
         'بدنه (شاسی)' => 'body', 'بدنه(شاسی)' => 'body', 'بدنه' => 'body', 'شاسی' => 'chassis',
@@ -521,7 +522,7 @@ function nexv_import_export_page_html() {
             <div class="notice notice-success"><p>کشِ محصولات و دسته‌بندی‌ها پاک شد.</p></div>
         <?php endif; ?>
         <?php if (isset($_GET['slugsfixed'])): ?>
-            <div class="notice notice-success"><p>پیوند یکتای <?php echo (int) $_GET['slugsfixed']; ?> محصول/مقاله به انگلیسی تبدیل شد.</p></div>
+            <div class="notice notice-success"><p>پیوند یکتای <?php echo (int) $_GET['slugsfixed']; ?> دسته‌بندی/محصول/مقاله به انگلیسی تبدیل شد.</p></div>
         <?php endif; ?>
 
         <div class="nexv-ie-grid">
@@ -888,7 +889,7 @@ add_action('admin_post_nexv_fix_slugs', function () {
     check_admin_referer('nexv_fix_slugs');
     @set_time_limit(0);
 
-    $fixed = 0;
+    $fixed = nexv_fix_all_category_slugs();
     foreach (['nexv_product', 'nexv_article'] as $pt) {
         $posts = get_posts(['post_type' => $pt, 'numberposts' => -1, 'post_status' => 'any']);
         foreach ($posts as $p) {
@@ -2558,3 +2559,70 @@ add_filter('rank_math/sitemap/entry', function ($url, $type, $object) {
     }
     return $url;
 }, 20, 3);
+
+/* =========================================================================
+ * پیوند یکتای انگلیسی برای دسته‌بندی‌های محصول (nexv_cat)
+ * هر دسته‌ای که ساخته/ویرایش بشه و اسلاگش فارسی باشه، از روی نامش انگلیسی می‌شه
+ * (مثلاً «قطعات آیفون» -> iphone-parts). اگه تکراری بود، اسلاگِ والد به آخرش اضافه می‌شه.
+ * اسلاگِ فارسیِ قبلی نگه داشته می‌شه تا لینک‌های قدیمی با ۳۰۱ به لینکِ جدید برن.
+ * ========================================================================= */
+function nexv_slug_is_english($slug) {
+    return $slug !== '' && strpos($slug, '%') === false && !preg_match('/[^\x00-\x7f]/', $slug);
+}
+function nexv_english_term_slug($term) {
+    $base = nexv_transliterate_title_to_slug($term->name);
+    $slug = $base;
+    $taken = function ($s) use ($term) { $t = get_term_by('slug', $s, 'nexv_cat'); return $t && (int) $t->term_id !== (int) $term->term_id; };
+    if ($taken($slug) && $term->parent) {
+        $parent = get_term($term->parent, 'nexv_cat');
+        if ($parent && !is_wp_error($parent)) $slug = $base . '-' . (nexv_slug_is_english($parent->slug) ? $parent->slug : nexv_transliterate_title_to_slug($parent->name));
+    }
+    $i = 2; $try = $slug;
+    while ($taken($try)) { $try = $slug . '-' . $i++; }
+    return $try;
+}
+function nexv_fix_category_slug($term_id) {
+    static $busy = false;
+    if ($busy) return false;
+    $term = get_term($term_id, 'nexv_cat');
+    if (!$term || is_wp_error($term) || nexv_slug_is_english($term->slug)) return false;
+    $busy = true;
+    add_term_meta($term->term_id, '_nexv_old_slug', urldecode($term->slug));
+    $r = wp_update_term($term->term_id, 'nexv_cat', ['slug' => nexv_english_term_slug($term)]);
+    $busy = false;
+    return !is_wp_error($r);
+}
+add_action('created_nexv_cat', 'nexv_fix_category_slug', 20);
+add_action('edited_nexv_cat', 'nexv_fix_category_slug', 20);
+
+function nexv_fix_all_category_slugs() {
+    $fixed = 0;
+    /* اول والدها، بعد فرزندها (ترتیب بر اساس عمق) تا اسلاگِ والد قبل از فرزند انگلیسی شده باشه */
+    $terms = get_terms(['taxonomy' => 'nexv_cat', 'hide_empty' => false]);
+    if (is_wp_error($terms)) return 0;
+    usort($terms, function ($a, $b) { return count(get_ancestors($a->term_id, 'nexv_cat')) - count(get_ancestors($b->term_id, 'nexv_cat')); });
+    foreach ($terms as $t) { if (nexv_fix_category_slug($t->term_id)) $fixed++; }
+    delete_transient('nexv_categories_cache_v1');
+    delete_transient('nexv_products_cache_v2');
+    flush_rewrite_rules();
+    return $fixed;
+}
+/* یک بار به‌صورت خودکار بعد از به‌روزرسانیِ قالب اجرا می‌شه */
+add_action('admin_init', function () {
+    if (get_option('nexv_cat_slugs_en_v1') || !current_user_can('manage_options')) return;
+    @set_time_limit(0);
+    nexv_fix_all_category_slugs();
+    update_option('nexv_cat_slugs_en_v1', 1, false);
+});
+
+/* لینک‌های قدیمیِ فارسیِ دسته‌بندی -> ۳۰۱ به لینکِ انگلیسیِ جدید */
+add_action('template_redirect', function () {
+    if (!is_404()) return;
+    $path = trim(urldecode(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH)), '/');
+    if (!preg_match('#(?:^|/)product-cat/(.+)$#u', $path, $m)) return;
+    $parts = explode('/', trim($m[1], '/'));
+    $last = end($parts);
+    $found = get_terms(['taxonomy' => 'nexv_cat', 'hide_empty' => false, 'number' => 1, 'meta_key' => '_nexv_old_slug', 'meta_value' => $last]);
+    if (!$found || is_wp_error($found)) { $t = get_term_by('slug', sanitize_title($last), 'nexv_cat'); $found = $t ? [$t] : []; }
+    if ($found) { $link = get_term_link($found[0]); if (!is_wp_error($link)) { wp_redirect($link, 301); exit; } }
+}, 1);
