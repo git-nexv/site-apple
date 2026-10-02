@@ -2877,3 +2877,41 @@ add_action('admin_init', function () {
     update_option('nexv_cat_fix_v2', 1, false);
     set_transient('nexv_cat_fix_report', $log, DAY_IN_SECONDS);
 }, 31);
+
+/* =========================================================================
+ * اصلاحِ سوم: هر محصولی که «قطعه» هست (مادربرد، ال سی دی، باتری، دوربین، ...)
+ * ولی به دسته‌ای زیرِ شاخه‌ی «خرید ...» وصل شده، به دسته‌ی هم‌مسیرش در شاخه‌ی
+ * «قطعات ...» منتقل می‌شه (مثلاً خرید آیفون > سری 18 > آیفون 18 پرو
+ *  -> قطعات آیفون > سری 18 > آیفون 18 پرو).
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (get_option('nexv_cat_fix_v3') || !current_user_can('manage_options')) return;
+    global $wpdb;
+    $log = [];
+    $partRe = '/مادربرد|السیدی|باتری|دوربین|بدنه|شاسی|تاچ|فلت|اسپیکر|بلندگو|میکروفون|سوکت|motherboard|lcd|battery|camera|body|chassis/u';
+    $rows = $wpdb->get_results("SELECT ID, post_title FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_status NOT IN ('trash','auto-draft')");
+    foreach ($rows as $r) {
+        if (!preg_match($partRe, nexv_norm_fa($r->post_title))) continue;
+        $terms = wp_get_post_terms((int) $r->ID, 'nexv_cat');
+        if (is_wp_error($terms) || !$terms) continue;
+        $newIds = []; $changed = false;
+        foreach ($terms as $t) {
+            $chain = array_reverse(array_map(function ($id) { $x = get_term($id, 'nexv_cat'); return $x ? $x->name : ''; }, get_ancestors($t->term_id, 'nexv_cat')));
+            $chain[] = $t->name;
+            $buyIdx = null;
+            foreach ($chain as $i => $n) { if (mb_strpos(nexv_norm_fa($n), 'خرید') === 0) { $buyIdx = $i; break; } }
+            if ($buyIdx === null) { $newIds[] = (int) $t->term_id; continue; }
+            $alt = $chain;
+            $alt[$buyIdx] = preg_replace('/^\s*خرید/u', 'قطعات', $chain[$buyIdx]);
+            $target = nexv_cat_by_path_names(implode(' > ', $alt));
+            if ($target) { $newIds[] = $target; $changed = true; $log[] = "«{$r->post_title}» (#{$r->ID}): " . implode(' ← ', $chain) . '  →  ' . implode(' ← ', $alt); }
+            else { $newIds[] = (int) $t->term_id; $log[] = "«{$r->post_title}»: دسته‌ی معادل در قطعات پیدا نشد (" . implode(' > ', $alt) . ')'; }
+        }
+        if ($changed) wp_set_post_terms((int) $r->ID, array_values(array_unique($newIds)), 'nexv_cat');
+    }
+    if (!$log) $log[] = 'هیچ قطعه‌ای در شاخه‌ی «خرید» پیدا نشد.';
+    delete_transient('nexv_categories_cache_v1');
+    delete_transient('nexv_products_cache_v2');
+    update_option('nexv_cat_fix_v3', 1, false);
+    set_transient('nexv_cat_fix_report', $log, DAY_IN_SECONDS);
+}, 32);
