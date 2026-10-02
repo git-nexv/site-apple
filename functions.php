@@ -2784,3 +2784,96 @@ add_action('admin_notices', function () {
     foreach ($log as $l) echo '<li>' . esc_html($l) . '</li>';
     echo '</ul></div>';
 });
+
+/* =========================================================================
+ * اصلاحِ دومِ دسته‌بندی‌ها (نسخه‌ی مقاوم‌تر، بر اساسِ داده‌ی واقعیِ سایت):
+ * ۱) هر محصولی که عنوانش «قطعه + آیفون ۱۸ پرو مکس» هست (مادربرد/ال سی دی/باتری/دوربین)
+ *    فقط به «آیفون 18 پرو مکس»ِ شاخه‌ی «قطعات آیفون» وصل می‌شه.
+ * ۲) زیردسته‌های «اپل واچ > خرید اپل واچ > سری 7»: سایزِ تکراری حذف (محصولاتش به
+ *    نسخه‌ی باقی‌مونده منتقل) و سایزِ جاافتاده ساخته می‌شه تا دقیقاً ۴۱ و ۴۵ بمونه.
+ * ========================================================================= */
+function nexv_cat_has_ancestor_like($termId, $needle) {
+    foreach (get_ancestors($termId, 'nexv_cat') as $a) {
+        $t = get_term($a, 'nexv_cat');
+        if ($t && !is_wp_error($t) && mb_strpos(nexv_norm_fa($t->name), nexv_norm_fa($needle)) !== false) return true;
+    }
+    return false;
+}
+add_action('admin_init', function () {
+    if (get_option('nexv_cat_fix_v2') || !current_user_can('manage_options')) return;
+    global $wpdb;
+    $log = [];
+    $all = get_terms(['taxonomy' => 'nexv_cat', 'hide_empty' => false]);
+    if (is_wp_error($all)) return;
+
+    /* ---- ۱) قطعاتِ آیفون ۱۸ پرو مکس ---- */
+    $partsLeaf = 0; $buyLeaf = 0;
+    foreach ($all as $t) {
+        if (nexv_norm_fa($t->name) !== nexv_norm_fa('آیفون 18 پرو مکس')) continue;
+        if (nexv_cat_has_ancestor_like($t->term_id, 'قطعات')) $partsLeaf = (int) $t->term_id;
+        elseif (nexv_cat_has_ancestor_like($t->term_id, 'خرید')) $buyLeaf = (int) $t->term_id;
+    }
+    if (!$partsLeaf) {
+        $log[] = 'دسته‌ی «آیفون 18 پرو مکس» زیرِ «قطعات آیفون» پیدا نشد.';
+    } else {
+        $rows = $wpdb->get_results("SELECT ID, post_title FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_status <> 'trash' AND post_status <> 'auto-draft'");
+        foreach ($rows as $r) {
+            $n = nexv_norm_fa($r->post_title);
+            $is18pm = mb_strpos($n, nexv_norm_fa('آیفون 18 پرو مکس')) !== false || mb_strpos($n, 'iphone18promax') !== false;
+            $isPart = preg_match('/مادربرد|السیدی|باتری|دوربین|motherboard|lcd|battery|camera/u', $n);
+            if (!$is18pm || !$isPart) continue;
+            $before = wp_get_post_terms((int) $r->ID, 'nexv_cat', ['fields' => 'ids']);
+            if (is_array($before) && $before === [$partsLeaf]) { $log[] = "«{$r->post_title}» از قبل درست بود"; continue; }
+            wp_set_post_terms((int) $r->ID, [$partsLeaf], 'nexv_cat');
+            $log[] = "«{$r->post_title}» (#{$r->ID}) به قطعات آیفون ← آیفون 18 پرو مکس منتقل شد";
+        }
+    }
+
+    /* ---- ۲) سری 7ِ خریدِ اپل واچ ---- */
+    $s7 = 0;
+    foreach ($all as $t) {
+        if (nexv_norm_fa($t->name) === nexv_norm_fa('سری 7') && nexv_cat_has_ancestor_like($t->term_id, 'خرید') && nexv_cat_has_ancestor_like($t->term_id, 'اپل')) { $s7 = (int) $t->term_id; break; }
+    }
+    if (!$s7) {
+        $log[] = 'دسته‌ی «اپل واچ > خرید اپل واچ > سری 7» پیدا نشد.';
+    } else {
+        $kids = get_terms(['taxonomy' => 'nexv_cat', 'parent' => $s7, 'hide_empty' => false, 'orderby' => 'term_id']);
+        $bySize = [];
+        foreach ((array) $kids as $k) {
+            $num = preg_replace('/\D/', '', nexv_norm_fa($k->name));
+            $bySize[$num][] = $k;
+        }
+        $mm = function ($n) { return strtr($n, ['0'=>'۰','1'=>'۱','2'=>'۲','3'=>'۳','4'=>'۴','5'=>'۵','6'=>'۶','7'=>'۷','8'=>'۸','9'=>'۹']) . ' میلی‌متر'; };
+        /* اگه ۴۱ دوتا هست و ۴۵ نیست، دومیِ ۴۱ (همونی که بعداً ساخته شده) به ۴۵ تغییر نام می‌ده */
+        if (count($bySize['41'] ?? []) > 1 && empty($bySize['45'])) {
+            $extra = array_pop($bySize['41']);
+            wp_update_term($extra->term_id, 'nexv_cat', ['name' => $mm('45'), 'slug' => 'apple-watch-series-7-45mm-buy']);
+            $bySize['45'] = [$extra];
+            $log[] = 'یکی از دو «۴۱ میلی‌متر»ِ سری 7 به «۴۵ میلی‌متر» تغییر کرد';
+        }
+        foreach ($bySize as $num => $list) {
+            if ($num === '' ) continue;
+            $keep = array_shift($list);
+            if (nexv_norm_fa($keep->name) !== nexv_norm_fa($mm($num))) wp_update_term($keep->term_id, 'nexv_cat', ['name' => $mm($num)]);
+            foreach ($list as $dup) {
+                $pids = get_objects_in_term($dup->term_id, 'nexv_cat');
+                foreach ((array) $pids as $pid) wp_add_object_terms((int) $pid, (int) $keep->term_id, 'nexv_cat');
+                wp_delete_term($dup->term_id, 'nexv_cat');
+                $log[] = "«{$dup->name}» تکراری در سری 7 حذف شد" . ($pids ? ' (محصولاتش منتقل شدن)' : '');
+            }
+        }
+        foreach (['41', '45'] as $num) {
+            if (!empty($bySize[$num])) continue;
+            $r = wp_insert_term($mm($num), 'nexv_cat', ['parent' => $s7, 'slug' => "apple-watch-series-7-{$num}mm-buy"]);
+            if (!is_wp_error($r)) $log[] = "«{$mm($num)}» زیرِ سری 7 ساخته شد";
+        }
+        $final = get_terms(['taxonomy' => 'nexv_cat', 'parent' => $s7, 'hide_empty' => false, 'fields' => 'names']);
+        $log[] = 'زیردسته‌های فعلیِ سری 7 (خرید): ' . implode('، ', (array) $final);
+    }
+
+    delete_transient('nexv_categories_cache_v1');
+    delete_transient('nexv_products_cache_v2');
+    clean_term_cache([], 'nexv_cat');
+    update_option('nexv_cat_fix_v2', 1, false);
+    set_transient('nexv_cat_fix_report', $log, DAY_IN_SECONDS);
+}, 31);
