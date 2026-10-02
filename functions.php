@@ -2637,6 +2637,23 @@ add_action('admin_init', function () {
     $files = glob(get_stylesheet_directory() . '/seed/*.csv');
     if (!$files) return;
     global $wpdb;
+    /* به درخواستِ صریحِ مدیر سایت: همین ۶ محصولِ مشخص (فقط با این شناسه‌ها) یک بار حذف
+       می‌شن تا از روی فایل seed دوباره کامل ساخته بشن. به هیچ محصولِ دیگه‌ای دست زده نمی‌شه. */
+    if (!get_option('nexv_seed_recreate_v1')) {
+        $titles = [];
+        foreach ($files as $f) {
+            if (($h = fopen($f, 'r')) === false) continue;
+            $hd = fgetcsv($h); $ni = array_search('Name', array_map(function ($x) { return preg_replace('/^\xEF\xBB\xBF/', '', $x); }, (array) $hd));
+            while (($rw = fgetcsv($h)) !== false) { if ($ni !== false && isset($rw[$ni])) $titles[] = sanitize_text_field($rw[$ni]); }
+            fclose($h);
+        }
+        foreach ([26179, 26482, 26480, 26481, 26580, 26672] as $pid) {
+            $post = get_post($pid);
+            if ($post && $post->post_type === 'nexv_product' && in_array($post->post_title, $titles, true)) wp_delete_post($pid, true);
+        }
+        update_option('nexv_seed_recreate_v1', 1, false);
+        delete_option('nexv_seed_done_v2');
+    }
     $done = (array) get_option('nexv_seed_done_v2', []);
     $report = ['created' => [], 'skipped' => [], 'nocat' => []];
     foreach ($files as $file) {
