@@ -2636,7 +2636,9 @@ add_action('admin_init', function () {
     if (!current_user_can('manage_options')) return;
     $files = glob(get_stylesheet_directory() . '/seed/*.csv');
     if (!$files) return;
-    $done = (array) get_option('nexv_seed_done', []);
+    global $wpdb;
+    $done = (array) get_option('nexv_seed_done_v2', []);
+    $report = ['created' => [], 'skipped' => [], 'nocat' => []];
     foreach ($files as $file) {
         $key = basename($file);
         if (in_array($key, $done, true)) continue;
@@ -2649,8 +2651,11 @@ add_action('admin_init', function () {
             $r = array_combine($head, $row);
             $name = sanitize_text_field($r['Name'] ?? '');
             if ($name === '') continue;
-            $dupe = get_posts(['post_type' => 'nexv_product', 'title' => $name, 'post_status' => ['publish', 'draft', 'pending', 'private', 'future'], 'numberposts' => 1, 'fields' => 'ids']);
-            if ($dupe) continue;
+            $dupe = $wpdb->get_var($wpdb->prepare(
+                "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_title = %s AND post_status IN ('publish','draft','pending','private','future') LIMIT 1",
+                $name
+            ));
+            if ($dupe) { $report['skipped'][] = $name . ' (#' . $dupe . ')'; continue; }
             $id = wp_insert_post(['post_type' => 'nexv_product', 'post_title' => $name, 'post_content' => wp_kses_post($r['Description'] ?? ''), 'post_status' => 'publish']);
             if (is_wp_error($id) || !$id) continue;
             nexv_save_price_with_date($id, 0);
@@ -2662,12 +2667,24 @@ add_action('admin_init', function () {
             update_post_meta($id, '_nexv_icon', 'disc');
             if (!empty($r['Categories'])) {
                 $leaf = nexv_resolve_cat_for_product($r['Categories'], $name);
-                if ($leaf) wp_set_post_terms($id, [$leaf], 'nexv_cat');
+                if ($leaf) wp_set_post_terms($id, [$leaf], 'nexv_cat'); else $report['nocat'][] = $name;
             }
+            $report['created'][] = $name;
         }
         fclose($fh);
         $done[] = $key;
-        update_option('nexv_seed_done', $done, false);
+        update_option('nexv_seed_done_v2', $done, false);
         delete_transient('nexv_products_cache_v2');
+        set_transient('nexv_seed_report', $report, DAY_IN_SECONDS);
     }
+});
+add_action('admin_notices', function () {
+    $r = get_transient('nexv_seed_report');
+    if (!$r || !current_user_can('manage_options')) return;
+    delete_transient('nexv_seed_report');
+    echo '<div class="notice notice-info is-dismissible"><p><strong>NEXV — افزودن محصولات جدید:</strong></p>';
+    echo '<p>ساخته شد (' . count($r['created']) . '): ' . esc_html(implode('، ', $r['created']) ?: '—') . '</p>';
+    if ($r['skipped']) echo '<p>از قبل وجود داشت و ساخته نشد: ' . esc_html(implode('، ', $r['skipped'])) . '</p>';
+    if ($r['nocat']) echo '<p>دسته‌بندی پیدا نشد برای: ' . esc_html(implode('، ', $r['nocat'])) . '</p>';
+    echo '</div>';
 });
