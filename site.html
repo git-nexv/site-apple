@@ -708,6 +708,24 @@ footer{border-top:1px solid var(--border); padding:40px 0 22px;}
   border:1px solid var(--border); background:var(--bg-elev-2); color:var(--text); font-size:13.5px; font-weight:600;
 }
 .adv-filter-toggle svg{width:16px; height:16px;}
+.adv-filter{display:flex; flex-wrap:wrap; align-items:center; gap:8px;}
+/* باکسِ «دسته‌ی انتخاب‌شده» کنارِ دکمه‌ی فیلتر پیشرفته؛ هم‌شکلِ همون دکمه، با رنگِ تأکیدی */
+.adv-filter-active{
+  display:inline-flex; align-items:center; gap:8px; padding:6px 6px 6px 14px; border-radius:30px; max-width:100%;
+  border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background:color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2)); color:var(--text); font-size:13.5px; font-weight:600;
+  animation:advPillIn .25s ease;
+}
+.adv-filter-active[hidden]{display:none;}
+.adv-filter-active .afa-label{color:var(--text-dim); font-weight:500;}
+.adv-filter-active .afa-name{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--accent);}
+.adv-filter-active .afa-clear{
+  flex-shrink:0; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+  background:var(--bg-elev); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; padding:0;
+}
+.adv-filter-active .afa-clear:hover{color:var(--danger, #e5484d);}
+.adv-filter-active .afa-clear svg{width:12px; height:12px;}
+@keyframes advPillIn{from{opacity:0; transform:scale(.92);} to{opacity:1; transform:none;}}
 
 .filter-screen{
   position:fixed; inset:0; z-index:120; background:var(--bg); display:flex; flex-direction:column;
@@ -931,7 +949,7 @@ body{background:var(--bg);}
 
 /* سطح‌های داخل صفحه: شیشه‌ی شفاف با لبه‌ی نوری (بدون blur برای روان ماندنِ اسکرول در موبایل) */
 .card, .feature, .article-card, .product-detail, .pd-description, .pd-reviews,
-.chip, .btn-ghost, .icon-btn, .theme-toggle, .adv-filter-toggle, .orbit-item,
+.chip, .btn-ghost, .icon-btn, .theme-toggle, .adv-filter-toggle, .adv-filter-active, .orbit-item,
 .account-menu-item, .ship-option, .drawer-item, .filter-cat-box, .nexv-error-box{
   border-color:var(--glass-edge);
   box-shadow:var(--glass-hl), var(--glass-shadow);
@@ -1776,6 +1794,13 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
         فیلتر پیشرفته
       </button>
+      <div class="adv-filter-active" id="advFilterActive" hidden>
+        <span class="afa-label">دسته:</span>
+        <bdi class="afa-name" id="advFilterActiveName"></bdi>
+        <button type="button" class="afa-clear" id="advFilterClear" aria-label="حذف فیلتر">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
     </div>
     <div class="grid" id="productGrid"></div>
     <div id="searchModelReco"></div>
@@ -2275,6 +2300,21 @@ function wireProductCards(container){
 function render(list){
   grid.innerHTML = list.map(cardHtml).join('');
   wireProductCards(grid);
+  updateActiveFilterBox();
+}
+/* آخرین دسته‌ای که انتخاب شده کنارِ دکمه‌ی «فیلتر پیشرفته» نشون داده می‌شه */
+function updateActiveFilterBox(){
+  const box = document.getElementById('advFilterActive');
+  if(!box) return;
+  let cat = null;
+  try{
+    const slug = selectedCatPath.length ? selectedCatPath[selectedCatPath.length - 1] : '';
+    cat = slug ? CATS.find(c => c.slug === slug) : null;
+  }catch(_){ /* هنوز متغیرهای دسته‌بندی تعریف نشدن (رندرِ اولیه) */ }
+  if(!cat){ box.hidden = true; return; }
+  document.getElementById('advFilterActiveName').textContent = cat.name;
+  box.title = cat.name;
+  box.hidden = false;
 }
 const HOME_URL = window.NEXV_HOME_URL || '/';
 /* شماره‌ی تماسِ نوارِ بالای سایت (قابل‌تغییر از پیشخوان)، برای اینکه عبارتِ
@@ -2431,6 +2471,13 @@ wireChips();
    پس این المان‌ها ممکنه null باشن؛ حتماً قبل از رویداد گذاشتن چک بشن. */
 const filterScreen = document.getElementById('filterScreen');
 const advFilterToggle = document.getElementById('advFilterToggle');
+document.getElementById('advFilterClear')?.addEventListener('click', ()=>{
+  selectedCatPath = []; priceMin = null; priceMax = null;
+  renderAdvancedFilter();
+  document.querySelectorAll('#quickChips .chip').forEach(c=>c.classList.toggle('active', c.dataset.cat === 'all'));
+  render(pickHomeProducts());
+  updateUrlForSelectedCategory();
+});
 if(advFilterToggle && filterScreen){
   advFilterToggle.addEventListener('click', ()=>{
     renderAdvancedFilter();
