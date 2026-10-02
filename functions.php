@@ -2350,7 +2350,10 @@ function nexv_resolve_cat_path($path) {
     $parts = array_filter(array_map('trim', explode('>', (string) $path)), 'strlen');
     $parentId = 0; $leafId = 0;
     foreach ($parts as $part) {
-        $id = nexv_find_cat_in_parent($part, $parentId);
+        /* اول نامِ دقیق زیرِ همین والد؛ قبلاً اول اسلاگ (بدون توجه به والد) چک می‌شد و
+           مثلاً «سری 18» در مسیرِ «قطعات آیفون» به «سری 18»ی شاخه‌ی «خرید آیفون» می‌رسید. */
+        $id = nexv_cat_child_by_name($part, $parentId);
+        if (!$id) $id = nexv_find_cat_in_parent($part, $parentId);
         if (!$id) return 0;
         $parentId = $id; $leafId = $id;
     }
@@ -2705,4 +2708,79 @@ add_action('admin_notices', function () {
     if ($r['skipped']) echo '<p>از قبل وجود داشت و ساخته نشد: ' . esc_html(implode('، ', $r['skipped'])) . '</p>';
     if ($r['nocat']) echo '<p>دسته‌بندی پیدا نشد برای: ' . esc_html(implode('، ', $r['nocat'])) . '</p>';
     echo '</div>';
+});
+
+function nexv_cat_child_by_name($name, $parentId) {
+    $needle = nexv_norm_fa($name);
+    $kids = get_terms(['taxonomy' => 'nexv_cat', 'parent' => (int) $parentId, 'hide_empty' => false]);
+    if (is_wp_error($kids)) return 0;
+    foreach ($kids as $k) { if (nexv_norm_fa($k->name) === $needle) return (int) $k->term_id; }
+    return 0;
+}
+function nexv_cat_by_path_names($path) {
+    $id = 0;
+    foreach (array_map('trim', explode('>', $path)) as $part) {
+        $id = nexv_cat_child_by_name($part, $id);
+        if (!$id) return 0;
+    }
+    return $id;
+}
+
+/* =========================================================================
+ * اصلاحِ یک‌باره‌ی دسته‌بندی‌ها (به درخواستِ مدیر سایت):
+ * ۱) «۴۰ میلی‌متر» و «۴۴ میلی‌متر» اشتباهاً زیرِ «آیفون > خرید آیفون > سری 4» بودن؛
+ *    به «اپل واچ > خرید اپل واچ > سری 4» منتقل می‌شن.
+ * ۲) «اپل واچ > خرید اپل واچ > سری 7» زیردسته نداشت؛ «۴۱ میلی‌متر» و «۴۵ میلی‌متر» ساخته می‌شن.
+ * ۳) ۶ محصولِ جدید (مادربرد 4S و قطعاتِ ۱۸ پرو مکس) به دسته‌ی درستِ شاخه‌ی «قطعات» وصل می‌شن.
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (get_option('nexv_cat_fix_v1') || !current_user_can('manage_options')) return;
+    $log = [];
+    $iphoneS4 = nexv_cat_by_path_names('آیفون > خرید آیفون > سری 4');
+    $watchS4  = nexv_cat_by_path_names('اپل واچ > خرید اپل واچ > سری 4');
+    if ($iphoneS4 && $watchS4) {
+        foreach (['۴۰ میلی‌متر', '۴۴ میلی‌متر'] as $n) {
+            $wrong = nexv_cat_child_by_name($n, $iphoneS4);
+            if (!$wrong) continue;
+            if (nexv_cat_child_by_name($n, $watchS4)) { $log[] = "«$n» از قبل زیرِ سری 4 اپل واچ بود؛ نسخه‌ی اشتباه دست نخورد"; continue; }
+            wp_update_term($wrong, 'nexv_cat', ['parent' => $watchS4]);
+            $log[] = "«$n» به اپل واچ > خرید اپل واچ > سری 4 منتقل شد";
+        }
+    }
+    $watchS7 = nexv_cat_by_path_names('اپل واچ > خرید اپل واچ > سری 7');
+    if ($watchS7) {
+        foreach (['۴۱ میلی‌متر', '۴۵ میلی‌متر'] as $n) {
+            if (nexv_cat_child_by_name($n, $watchS7)) continue;
+            $r = wp_insert_term($n, 'nexv_cat', ['parent' => $watchS7, 'slug' => 'apple-watch-series-7-' . (strpos($n, '۴۱') !== false ? '41' : '45') . 'mm-buy']);
+            if (!is_wp_error($r)) $log[] = "«$n» زیرِ اپل واچ > خرید اپل واچ > سری 7 ساخته شد";
+        }
+    }
+    $fixes = [
+        'مادربرد آیفون 4S | iPhone 4s Motherboard' => 'آیفون > قطعات آیفون > سری 4 > آیفون 4S',
+    ];
+    foreach (['مادربرد آیفون 18 پرو مکس | iPhone 18 Pro Max Motherboard', 'ال سی دی آیفون ۱۸ پرو مکس | iPhone 18 Pro Max LCD',
+              'باتری آیفون ۱۸ پرو مکس | iPhone 18 Pro Max Battery', 'دوربین پشت آیفون ۱۸ پرو مکس | iPhone 18 Pro Max Rear Camera',
+              'دوربین جلو آیفون ۱۸ پرو مکس | iPhone 18 Pro Max Front Camera'] as $t) {
+        $fixes[$t] = 'آیفون > قطعات آیفون > سری 18 > آیفون 18 پرو مکس';
+    }
+    global $wpdb;
+    foreach ($fixes as $title => $path) {
+        $leaf = nexv_cat_by_path_names($path);
+        if (!$leaf) { $log[] = "دسته‌ی «$path» پیدا نشد"; continue; }
+        $ids = $wpdb->get_col($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_title = %s AND post_status <> 'trash'", $title));
+        foreach ($ids as $pid) { wp_set_post_terms((int) $pid, [$leaf], 'nexv_cat'); $log[] = "دسته‌ی «$title» درست شد"; }
+    }
+    delete_transient('nexv_categories_cache_v1');
+    delete_transient('nexv_products_cache_v2');
+    clean_term_cache([], 'nexv_cat');
+    update_option('nexv_cat_fix_v1', 1, false);
+    set_transient('nexv_cat_fix_report', $log, DAY_IN_SECONDS);
+}, 30);
+add_action('admin_notices', function () {
+    $log = get_transient('nexv_cat_fix_report');
+    if (!$log || !current_user_can('manage_options')) return;
+    delete_transient('nexv_cat_fix_report');
+    echo '<div class="notice notice-info is-dismissible"><p><strong>NEXV — اصلاح دسته‌بندی‌ها:</strong></p><ul style="list-style:disc;padding-right:20px">';
+    foreach ($log as $l) echo '<li>' . esc_html($l) . '</li>';
+    echo '</ul></div>';
 });
