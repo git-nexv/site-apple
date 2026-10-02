@@ -2626,3 +2626,48 @@ add_action('template_redirect', function () {
     if (!$found || is_wp_error($found)) { $t = get_term_by('slug', sanitize_title($last), 'nexv_cat'); $found = $t ? [$t] : []; }
     if ($found) { $link = get_term_link($found[0]); if (!is_wp_error($link)) { wp_redirect($link, 301); exit; } }
 }, 1);
+
+/* =========================================================================
+ * افزودنِ یک‌باره‌ی محصولاتِ جدید از فایل‌های پوشه‌ی seed/ (بعد از به‌روزرسانیِ قالب)
+ * فقط محصول جدید می‌سازه؛ هیچ محصولِ موجودی تغییر نمی‌کنه. اگه محصولی با همین
+ * عنوان از قبل (منتشرشده/پیش‌نویس/خصوصی) وجود داشته باشه، رد می‌شه تا تکراری نشه.
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (!current_user_can('manage_options')) return;
+    $files = glob(get_stylesheet_directory() . '/seed/*.csv');
+    if (!$files) return;
+    $done = (array) get_option('nexv_seed_done', []);
+    foreach ($files as $file) {
+        $key = basename($file);
+        if (in_array($key, $done, true)) continue;
+        $fh = fopen($file, 'r');
+        if (!$fh) continue;
+        $head = fgetcsv($fh);
+        if ($head) $head[0] = preg_replace('/^\xEF\xBB\xBF/', '', $head[0]);
+        while (($row = fgetcsv($fh)) !== false) {
+            if (!$head || count($row) !== count($head)) continue;
+            $r = array_combine($head, $row);
+            $name = sanitize_text_field($r['Name'] ?? '');
+            if ($name === '') continue;
+            $dupe = get_posts(['post_type' => 'nexv_product', 'title' => $name, 'post_status' => ['publish', 'draft', 'pending', 'private', 'future'], 'numberposts' => 1, 'fields' => 'ids']);
+            if ($dupe) continue;
+            $id = wp_insert_post(['post_type' => 'nexv_product', 'post_title' => $name, 'post_content' => wp_kses_post($r['Description'] ?? ''), 'post_status' => 'publish']);
+            if (is_wp_error($id) || !$id) continue;
+            nexv_save_price_with_date($id, 0);
+            update_post_meta($id, '_nexv_short_desc', sanitize_textarea_field($r['Short description'] ?? ''));
+            if (!empty($r['Color Options'])) update_post_meta($id, '_nexv_colors', sanitize_text_field($r['Color Options']));
+            if (!empty($r['Storage Options'])) update_post_meta($id, '_nexv_storages', sanitize_text_field($r['Storage Options']));
+            if (!empty($r['Tags'])) update_post_meta($id, '_nexv_badge', implode('|', array_filter(array_map('trim', preg_split('/\s*[,،|]\s*/u', $r['Tags'])))));
+            update_post_meta($id, '_nexv_color', '#6a4dff');
+            update_post_meta($id, '_nexv_icon', 'disc');
+            if (!empty($r['Categories'])) {
+                $leaf = nexv_resolve_cat_for_product($r['Categories'], $name);
+                if ($leaf) wp_set_post_terms($id, [$leaf], 'nexv_cat');
+            }
+        }
+        fclose($fh);
+        $done[] = $key;
+        update_option('nexv_seed_done', $done, false);
+        delete_transient('nexv_products_cache_v2');
+    }
+});
