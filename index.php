@@ -59,7 +59,7 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
     </head>
     <body>
         <div class="article-page">
-            <a class="back" href="<?php echo esc_url(home_url('/#articles')); ?>">← بازگشت به مقالات</a>
+            <a class="back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/#articles')); ?>">← بازگشت به مقالات</a>
             <?php if ($aimg): ?><img class="cover" src="<?php echo esc_url($aimg); ?>" alt="<?php echo esc_attr($atitle); ?>"><?php endif; ?>
             <h1><?php echo esc_html($atitle); ?></h1>
             <div class="body-content"><?php echo $acontent; ?></div>
@@ -116,7 +116,7 @@ if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_articl
     </head>
     <body>
         <div class="blog-wrap">
-            <a class="back" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
+            <a class="back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
             <h1>مقالات آموزشی NEXV</h1>
             <div class="blog-grid">
                 <?php foreach ($arts as $a):
@@ -247,7 +247,7 @@ if (function_exists('is_page') && is_page('terms')) {
                 هر سؤالی درباره‌ی این قوانین داشتید، قبل از خرید با ما تماس بگیرید:
                 <a href="<?php echo esc_attr($tel_href); ?>" dir="ltr"><?php echo esc_html($phone); ?></a>
             </div>
-            <a class="terms-back" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
+            <a class="terms-back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
         </div>
     </body>
     </html>
@@ -326,7 +326,7 @@ if (function_exists('is_page') && is_page('about')) {
                 <?php if ($ig): ?><a href="<?php echo esc_url($ig); ?>" target="_blank" rel="noopener">اینستاگرام</a><?php endif; ?>
             </div>
 
-            <a class="about-back" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
+            <a class="about-back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
         </div>
     </body>
     </html>

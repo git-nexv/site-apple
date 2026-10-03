@@ -2606,7 +2606,8 @@ document.addEventListener('click', e=>{
   if(!a) return;
   /* اگه از همون صفحه‌ی فروشگاه اومده، با Back مرورگر برمی‌گرده تا جای اسکرول هم حفظ بشه */
   try{
-    if(document.referrer && samePath(document.referrer, a.href) && history.length > 1){ e.preventDefault(); history.back(); }
+    /* هر صفحه‌ای از همین سایت که ازش اومده (فروشگاه، محصولِ قبلی، مقاله) با Back برمی‌گرده */
+    if(document.referrer && new URL(document.referrer).origin === location.origin && history.length > 1){ e.preventDefault(); history.back(); }
   }catch(_){}
 });
 window.addEventListener('pageshow', ()=>{ try{ rememberShopUrl(); }catch(_){} });
