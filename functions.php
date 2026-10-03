@@ -2982,6 +2982,78 @@ function nexv_static_dock_html($active = '') {
     ];
     ob_start(); ?>
 <style>
+/* پس‌زمینه‌ی ثابت و متحرکِ صفحه‌ی اصلی؛ باکس‌ها به‌صورت شیشه‌ای روش اسکرول می‌شن */
+html, body{background:transparent !important;}
+html{background:#f3f1f9 !important;} html[data-theme="dark"]{background:#08080d !important;}
+#nexvBg{
+  position:fixed; inset:0;
+  /* کمی بلندتر از صفحه تا موقعِ جمع‌شدنِ نوار آدرسِ سافاری، لبه‌ی پایین دیده نشه */
+  bottom:-120px;
+  z-index:-1; pointer-events:none; overflow:hidden; contain:strict;
+  background:linear-gradient(165deg, #f5f3fc 0%, #f1f1f8 50%, #f3f1f9 100%);
+}
+html[data-theme="dark"] #nexvBg{background:linear-gradient(165deg, #0a0912 0%, #08080d 50%, #0a0a13 100%);}
+#nexvBg .blob{
+  position:absolute; border-radius:50%; will-change:transform;
+  background:radial-gradient(circle closest-side, var(--c) 0%, color-mix(in srgb, var(--c) 45%, transparent) 45%, transparent 100%);
+  animation:var(--anim) var(--dur) ease-in-out infinite alternate;
+}
+/* رنگ‌های ملایم و بدون سبز: بنفش، یاسی، آبیِ آسمانیِ کم‌رنگ و صورتیِ پودری */
+#nexvBg .b1{--c:rgba(139,112,255,.30); width:78vmax; height:78vmax; left:-22vmax; top:-26vmax; --anim:nexvDance1; --dur:26s;}
+#nexvBg .b2{--c:rgba(167,139,250,.22); width:62vmax; height:62vmax; right:-20vmax; top:6vh;    --anim:nexvDance2; --dur:31s;}
+#nexvBg .b3{--c:rgba(216,180,254,.26); width:70vmax; height:70vmax; left:18vw;  bottom:-34vmax; --anim:nexvDance3; --dur:37s;}
+#nexvBg .b4{--c:rgba(147,180,245,.20); width:54vmax; height:54vmax; left:-16vmax; bottom:4vh;  --anim:nexvDance4; --dur:43s;}
+#nexvBg .b5{--c:rgba(244,184,214,.16); width:42vmax; height:42vmax; right:4vw;  top:44vh;       --anim:nexvDance5; --dur:29s;}
+html[data-theme="dark"] #nexvBg .b1{--c:rgba(124,100,240,.26);}
+html[data-theme="dark"] #nexvBg .b2{--c:rgba(139,112,255,.14);}
+html[data-theme="dark"] #nexvBg .b3{--c:rgba(168,120,240,.16);}
+html[data-theme="dark"] #nexvBg .b4{--c:rgba(99,130,220,.13);}
+html[data-theme="dark"] #nexvBg .b5{--c:rgba(210,120,170,.07);}
+/* لایه‌ی نورِ نرم برای عمق و خوانایی متن */
+#nexvBg::after{
+  content:""; position:absolute; inset:0;
+  background:radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.35), transparent 60%);
+}
+html[data-theme="dark"] #nexvBg::after{background:radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,.04), transparent 60%);}
+
+@keyframes nexvDance1{
+  0%  {transform:translate3d(0,0,0) scale(1);}
+  50% {transform:translate3d(14vw, 10vh,0) scale(1.12);}
+  100%{transform:translate3d(26vw,-4vh,0) scale(.94);}
+}
+@keyframes nexvDance2{
+  0%  {transform:translate3d(0,0,0) scale(1);}
+  50% {transform:translate3d(-18vw,14vh,0) scale(.9);}
+  100%{transform:translate3d(-8vw,32vh,0) scale(1.1);}
+}
+@keyframes nexvDance3{
+  0%  {transform:translate3d(0,0,0) scale(1.05);}
+  50% {transform:translate3d(-20vw,-16vh,0) scale(.92);}
+  100%{transform:translate3d(10vw,-30vh,0) scale(1.14);}
+}
+@keyframes nexvDance4{
+  0%  {transform:translate3d(0,0,0) scale(.95);}
+  50% {transform:translate3d(22vw,-20vh,0) scale(1.1);}
+  100%{transform:translate3d(36vw,-6vh,0) scale(1);}
+}
+@keyframes nexvDance5{
+  0%  {transform:translate3d(0,0,0) scale(1); opacity:.7;}
+  50% {transform:translate3d(-26vw,-22vh,0) scale(1.25); opacity:1;}
+  100%{transform:translate3d(-40vw,10vh,0) scale(.9); opacity:.75;}
+}
+@media (prefers-reduced-motion: reduce){ #nexvBg .blob{animation:none;} }
+.body-content, .blog-card, .terms-box, .about-box, .rp-card{
+  background:rgba(255,255,255,.62) !important; border:1px solid rgba(255,255,255,.7) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 14px 36px rgba(20,10,60,.08) !important;
+  -webkit-backdrop-filter:blur(16px) saturate(170%); backdrop-filter:blur(16px) saturate(170%);
+}
+/* کارت‌های ردیفِ افقی blur نمی‌گیرن (وگرنه یه نوارِ روشن پشتِ ردیف کشیده می‌شه) */
+.rp-card{-webkit-backdrop-filter:none !important; backdrop-filter:none !important; background:rgba(255,255,255,.72) !important;}
+html[data-theme="dark"] .body-content, html[data-theme="dark"] .blog-card, html[data-theme="dark"] .terms-box,
+html[data-theme="dark"] .about-box, html[data-theme="dark"] .rp-card{
+  background:rgba(30,30,40,.55) !important; border-color:rgba(255,255,255,.08) !important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 14px 36px rgba(0,0,0,.45) !important;
+}
 .sdock{--h:64px; position:fixed; z-index:90; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
   width:min(560px, calc(100vw - 20px)); display:flex; gap:10px; direction:ltr; font-family:'Vazirmatn',Tahoma,sans-serif; -webkit-tap-highlight-color:transparent;}
 .sdock-glass{background:rgba(255,255,255,.82); -webkit-backdrop-filter:blur(28px) saturate(200%); backdrop-filter:blur(28px) saturate(200%);
@@ -3007,6 +3079,7 @@ html[data-theme="dark"] .sdock-search button{color:#ececf4;}
 body{padding-bottom:110px !important;}
 @media (max-width:420px){ .sdock-item{font-size:10.5px;} .sdock-item svg{width:23px; height:23px;} }
 </style>
+<div id="nexvBg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span><span class="blob b4"></span><span class="blob b5"></span></div>
 <div class="sdock" id="sDock">
   <nav class="sdock-pill sdock-glass" aria-label="منوی اصلی">
     <?php foreach ($items as $it): ?>
@@ -3064,7 +3137,7 @@ function nexv_related_products_html($ids, $title = 'محصولات مرتبط') 
 <style>
 .rp-wrap{max-width:960px; margin:34px auto 0;}
 .rp-wrap h2{font-size:19px; margin:0 4px 14px; font-weight:800;}
-.rp-track{display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory; padding:4px 4px 18px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.rp-track{display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory; padding:24px 4px 64px; margin:-24px -4px -58px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
 .rp-track::-webkit-scrollbar{display:none;}
 .rp-card{flex:0 0 200px; scroll-snap-align:start; background:#fff; border:1px solid rgba(255,255,255,.7); border-radius:22px; padding:14px; text-decoration:none; color:inherit;
   display:flex; flex-direction:column; box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 12px 28px rgba(20,10,60,.08); transition:transform .3s ease;}

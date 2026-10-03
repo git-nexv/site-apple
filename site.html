@@ -267,7 +267,9 @@ section{padding:80px 0;}
   /* اسکرولِ افقی هر چیزی رو که از بالا/پایینِ ردیف بیرون بزنه می‌بُره؛ برای همین کارت موقعِ
      هاور از بالا زیرِ لبه می‌رفت و سایه‌ش از پایین با یک خطِ صاف قطع می‌شد (همون حالتِ
      دورنگ). با این padding جا باز می‌شه و margin منفی نمی‌ذاره فاصله‌ی ظاهری عوض بشه. */
-  padding:14px 4px 30px; margin:-14px -4px -24px;
+  /* سایه‌ی کارت (تا ~۶۰px پایین‌تر در حالتِ هاور) نباید با لبه‌ی صافِ ردیف بریده بشه؛
+     همین برش یه نوارِ رنگیِ متفاوت زیرِ ردیف می‌ساخت */
+  padding:24px 4px 64px; margin:-24px -4px -58px;
   scrollbar-width:none; -ms-overflow-style:none;
 }
 .reco-track .card{min-width:200px; max-width:200px; scroll-snap-align:start; flex-shrink:0;}
@@ -385,7 +387,8 @@ section{padding:80px 0;}
 .articles-head{display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:10px;}
 .articles-see-all{white-space:nowrap;}
 .articles-row{
-  display:flex; gap:16px; overflow-x:auto; scroll-snap-type:x proximity; padding-bottom:8px;
+  display:flex; gap:16px; overflow-x:auto; scroll-snap-type:x proximity;
+  padding:24px 4px 64px; margin:-24px -4px -58px;
   scrollbar-width:thin;
 }
 /* نوارِ اسکرولِ افقی مخفی شد؛ کشیدن با انگشت/ترک‌پد و چرخِ موس همچنان کار می‌کنه */
@@ -962,6 +965,9 @@ body{background:var(--bg);}
   box-shadow:var(--glass-hl), var(--glass-shadow);
 }
 .chip.active{box-shadow:var(--glass-hl), 0 6px 18px var(--accent-soft);}
+/* کارت‌های داخلِ ردیف‌های افقیِ محوشونده (mask) نباید blur بگیرن؛ backdrop-filter داخلِ
+   لایه‌ی mask یک مستطیلِ روشن پشتِ کلِ ردیف می‌کشید و رنگش با پس‌زمینه فرق می‌کرد. */
+.reco-track .card, .articles-row .article-card{-webkit-backdrop-filter:none !important; backdrop-filter:none !important;}
 /* روی دسکتاپ که قدرت پردازش بیشتره، کارت‌ها blur واقعی هم می‌گیرن */
 @media (hover:hover) and (min-width:900px){
   .card, .feature, .article-card, .product-detail, .pd-description, .pd-reviews{
@@ -4858,10 +4864,15 @@ if(stage){
   /* ---------- بالا آمدنِ نوار همراه با کیبوردِ موبایل ---------- */
   if(window.visualViewport){
     const vv = window.visualViewport;
+    /* نوار همیشه پایینِ صفحه پین می‌مونه؛ فقط وقتی کیبورد واقعاً باز است (فیلدی در حال
+       تایپه) بالا میاد. قبلاً جمع/باز شدنِ نوارِ آدرسِ سافاری موقعِ اسکرول هم نوار رو جابه‌جا می‌کرد. */
     const onVV = ()=>{
+      const ae = document.activeElement;
+      const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
       const hidden = window.innerHeight - vv.height - vv.offsetTop;
-      dock.style.setProperty('--kb', (hidden > 60 ? -hidden : 0) + 'px');
+      dock.style.setProperty('--kb', (typing && hidden > 120 ? -hidden : 0) + 'px');
     };
+    document.addEventListener('focusout', ()=> setTimeout(onVV, 50));
     vv.addEventListener('resize', onVV);
     vv.addEventListener('scroll', onVV);
   }
