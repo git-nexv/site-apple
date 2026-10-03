@@ -626,6 +626,12 @@ if ($ssr !== '') {
          . $ssr . '<script>(function(){var e=document.getElementById("nexvSsr");if(e)e.remove();})();</script>';
     $html = preg_replace_callback('#<body([^>]*)>#i', function ($m) use ($ssr) { return $m[0] . $ssr; }, $html, 1);
 }
+/* صفحه‌های کمکیِ سبد/تسویه/حساب/فروشگاه کپیِ صفحه‌ی اصلی‌ان: noindex + canonical به صفحه‌ی اصلی */
+if (function_exists('nexv_utility_page_slugs') && function_exists('is_page') && is_page(nexv_utility_page_slugs())) {
+    $seo_head = preg_replace('#<meta name="robots"[^>]*>#i', '', $seo_head);
+    $seo_head = preg_replace('#<link rel="canonical"[^>]*>#i', '', $seo_head);
+    $seo_head .= '<meta name="robots" content="noindex, follow"><link rel="canonical" href="' . esc_url(home_url('/')) . '">';
+}
 $inject = $seo_head . $inject;
 $html = str_replace('<head>', "<head>\n" . $inject, $html);
 
