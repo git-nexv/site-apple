@@ -2568,16 +2568,14 @@ add_action('template_redirect', function () {
     if (is_page(['برگه-نمونه', 'sample-page'])) { wp_safe_redirect(home_url('/'), 301); exit; }
 });
 add_filter('wp_robots', function ($robots) {
-    if (is_page(nexv_utility_page_slugs())) { $robots['noindex'] = true; $robots['follow'] = true; unset($robots['index']); }
     return $robots;
 }, 99);
 add_filter('rank_math/frontend/robots', function ($robots) {
-    if (is_page(nexv_utility_page_slugs())) { $robots['index'] = 'noindex'; $robots['follow'] = 'follow'; }
     return $robots;
 }, 99);
 add_filter('rank_math/sitemap/entry', function ($url, $type, $object) {
     if ($type === 'post' && $object instanceof WP_Post && $object->post_type === 'page'
-        && in_array(urldecode($object->post_name), array_merge(nexv_utility_page_slugs(), ['برگه-نمونه', 'sample-page']), true)) {
+        && in_array(urldecode($object->post_name), ['برگه-نمونه', 'sample-page'], true)) {
         return false;
     }
     return $url;
@@ -3337,7 +3335,7 @@ add_action('admin_init', function () {
     update_option('nexv_pages_cleanup_v1', 1, false);
 });
 add_filter('rank_math/sitemap/exclude_post', function ($exclude, $post) {
-    if ($post && isset($post->post_type) && $post->post_type === 'page' && in_array(urldecode($post->post_name), array_merge(nexv_utility_page_slugs(), ['برگه-نمونه', 'sample-page']), true)) return true;
+    if ($post && isset($post->post_type) && $post->post_type === 'page' && in_array(urldecode($post->post_name), ['برگه-نمونه', 'sample-page'], true)) return true;
     return $exclude;
 }, 20, 2);
 
@@ -3368,3 +3366,26 @@ add_action('admin_init', function () {
     nexv_flush_rank_math_sitemap();
     update_option('nexv_pages_cleanup_v2', 1, false);
 }, 40);
+
+/* بازگردانی (به درخواستِ مدیر سایت): سبد خرید، فروشگاه، تسویه حساب و حساب کاربری
+   دوباره قابلِ ایندکس و داخلِ سایت‌مپ هستن؛ فقط «برگه نمونه» حذف شده می‌مونه. */
+add_action('admin_init', function () {
+    if (get_option('nexv_pages_restore_v1') || !current_user_can('manage_options')) return;
+    $ids = [];
+    foreach (nexv_utility_page_slugs() as $slug) {
+        $p = get_page_by_path($slug, OBJECT, 'page');
+        if ($p) {
+            $ids[] = (int) $p->ID;
+            delete_post_meta($p->ID, 'rank_math_robots');
+            if ($p->post_status !== 'publish') wp_update_post(['ID' => $p->ID, 'post_status' => 'publish']);
+        }
+    }
+    $opt = get_option('rank-math-options-sitemap', []);
+    if (is_array($opt) && isset($opt['exclude_posts'])) {
+        $cur = array_filter(array_map('intval', preg_split('/\\s*,\\s*/', (string) $opt['exclude_posts'])));
+        $opt['exclude_posts'] = implode(',', array_values(array_diff($cur, $ids)));
+        update_option('rank-math-options-sitemap', $opt);
+    }
+    nexv_flush_rank_math_sitemap();
+    update_option('nexv_pages_restore_v1', 1, false);
+}, 50);

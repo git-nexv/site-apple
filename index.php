@@ -626,40 +626,6 @@ if ($ssr !== '') {
          . $ssr . '<script>(function(){var e=document.getElementById("nexvSsr");if(e)e.remove();})();</script>';
     $html = preg_replace_callback('#<body([^>]*)>#i', function ($m) use ($ssr) { return $m[0] . $ssr; }, $html, 1);
 }
-/* صفحه‌های کمکیِ سبد/تسویه/حساب/فروشگاه کپیِ صفحه‌ی اصلی‌ان: noindex + canonical به صفحه‌ی اصلی */
-if (function_exists('nexv_utility_page_slugs') && function_exists('is_page') && is_page(nexv_utility_page_slugs())) {
-    $seo_head = preg_replace('#<meta name="robots"[^>]*>#i', '', $seo_head);
-    $seo_head = preg_replace('#<link rel="canonical"[^>]*>#i', '', $seo_head);
-    $seo_head .= '<meta name="robots" content="noindex, follow"><link rel="canonical" href="' . esc_url(home_url('/')) . '">';
-}
-/* ---------- فوترِ لینک‌دار + اسکیمای WebSite/Organization برای زیرلینک‌های گوگل ---------- */
-$foot = '';
-$groups = [];
-$nexv_tops = get_terms(['taxonomy' => 'nexv_cat', 'parent' => 0, 'hide_empty' => true]);
-foreach ((is_array($nexv_tops) ? $nexv_tops : []) as $top) {
-    if (is_wp_error($top)) continue;
-    $kids = get_terms(['taxonomy' => 'nexv_cat', 'parent' => $top->term_id, 'hide_empty' => true]);
-    $links = [];
-    if ($kids && !is_wp_error($kids)) foreach ($kids as $k) $links[] = [get_term_link($k), $k->name];
-    if (!$links) $links[] = [get_term_link($top), $top->name];
-    $groups[] = [$top->name, $links];
-}
-$groups[] = ['NEXV', [[get_post_type_archive_link('nexv_article') ?: home_url('/blog/'), 'مقالات آموزشی'], [home_url('/about/'), 'درباره ما'], [home_url('/terms/'), 'قوانین و مقررات']]];
-foreach ($groups as $g) {
-    $foot .= '<div><h4>' . esc_html($g[0]) . '</h4><ul>';
-    foreach ($g[1] as $l) if (!is_wp_error($l[0])) $foot .= '<li><a href="' . esc_url($l[0]) . '">' . esc_html($l[1]) . '</a></li>';
-    $foot .= '</ul></div>';
-}
-$html = str_replace('<!--NEXV_FOOT_LINKS-->', '<nav class="foot-nav" aria-label="لینک‌های اصلی سایت">' . $foot . '</nav>', $html);
-if (function_exists('is_front_page') && is_front_page()) {
-    $site_schema = ['@context' => 'https://schema.org', '@graph' => [
-        ['@type' => 'WebSite', '@id' => home_url('/#website'), 'url' => home_url('/'), 'name' => 'NEXV', 'alternateName' => ['نکس وی', 'فروشگاه اینترنتی نکس وی'],
-         'inLanguage' => 'fa-IR', 'potentialAction' => ['@type' => 'SearchAction', 'target' => home_url('/?nexv_search={search_term_string}'), 'query-input' => 'required name=search_term_string']],
-        ['@type' => 'Organization', '@id' => home_url('/#organization'), 'name' => 'NEXV', 'url' => home_url('/'),
-         'logo' => function_exists('nexv_logo_url') ? nexv_logo_url() : '', 'telephone' => (string) get_theme_mod('nexv_contact_phone', '09109973428')],
-    ]];
-    if (stripos($seo_head, '"WebSite"') === false) $seo_head .= '<script type="application/ld+json">' . wp_json_encode($site_schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
-}
 $inject = $seo_head . $inject;
 $html = str_replace('<head>', "<head>\n" . $inject, $html);
 
