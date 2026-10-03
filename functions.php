@@ -3244,3 +3244,60 @@ add_action('template_redirect', function () {
     ));
     if ($id) { wp_redirect(get_permalink((int) $id), 301); exit; }
 }, 2);
+
+/* =========================================================================
+ * سئو: اصلاحِ گزارش‌های Search Console
+ * ========================================================================= */
+/* ۱) http → https (گوگل http://nexv.ir/ رو به‌عنوان صفحه‌ی تکراری دیده بود) */
+add_action('template_redirect', function () {
+    if (is_ssl() || strpos(home_url('/'), 'https://') !== 0 || (defined('WP_CLI') && WP_CLI)) return;
+    /* پشتِ CDN (آروان، کلودفلر و ...) اتصالِ کاربر https هست حتی اگه سرور http ببینه؛ حلقه نسازه */
+    $xf = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') . (string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '') . (string) ($_SERVER['HTTP_CF_VISITOR'] ?? ''));
+    if (strpos($xf, 'https') !== false || strpos($xf, 'on') !== false) return;
+    wp_redirect('https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 301);
+    exit;
+}, -10);
+
+/* ۲) جستجوی پیش‌فرضِ وردپرس (?s=...) در این قالب صفحه‌ی جدایی نداره؛ آدرسِ
+   جستجوی اسکیمای Rank Math به جستجوی خودِ فروشگاه اشاره کنه و صفحه‌های جستجو ایندکس نشن. */
+add_filter('rank_math/json_ld/search_url', function () { return home_url('/?nexv_search={search_term_string}'); });
+add_action('template_redirect', function () {
+    if (isset($_GET['s']) && !is_admin()) {
+        $q = trim(wp_unslash((string) $_GET['s']));
+        wp_redirect(($q === '' || strpos($q, '{') !== false) ? home_url('/') : add_query_arg('nexv_search', rawurlencode($q), home_url('/')), 301);
+        exit;
+    }
+}, 1);
+add_filter('rank_math/frontend/robots', function ($r) {
+    if (isset($_GET['nexv_search']) || isset($_GET['nexv_tag'])) { $r['index'] = 'noindex'; $r['follow'] = 'follow'; }
+    return $r;
+}, 99);
+
+/* ۳) مقاله‌هایی که قبلاً آدرسِ فارسی داشتن: اگه مقاله‌ای با همون عنوان و آدرسِ انگلیسی هست، ۳۰۱ به اون */
+add_action('template_redirect', function () {
+    $path = urldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
+    if (!preg_match('#/article/([^/]+)/?$#u', $path, $m) || !preg_match('/[^\x00-\x7f]/', $m[1])) return;
+    $needle = nexv_norm_fa(str_replace('-', ' ', $m[1]));
+    foreach (get_posts(['post_type' => 'nexv_article', 'post_status' => 'publish', 'numberposts' => -1]) as $a) {
+        if (nexv_slug_is_english(urldecode($a->post_name)) && nexv_norm_fa($a->post_title) === $needle) {
+            wp_redirect(get_permalink($a), 301); exit;
+        }
+    }
+    if (is_404()) { wp_redirect(get_post_type_archive_link('nexv_article') ?: home_url('/'), 301); exit; }
+}, 3);
+
+/* ۴) گزارشِ محصولاتِ تکراری (دو محصول با عنوانِ یکسان → آدرس‌های ...-2) در پیشخوان */
+add_action('admin_notices', function () {
+    if (!current_user_can('manage_options')) return;
+    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+    if (!$screen || !in_array($screen->id, ['dashboard', 'edit-nexv_product', 'toplevel_page_nexv-dashboard'], true)) return;
+    global $wpdb;
+    $rows = $wpdb->get_results("SELECT post_title, GROUP_CONCAT(ID ORDER BY ID) ids, COUNT(*) c FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_status IN ('publish','draft','private','pending') GROUP BY post_title HAVING c > 1 LIMIT 50");
+    if (!$rows) return;
+    echo '<div class="notice notice-warning"><p><strong>NEXV — محصولاتِ تکراری (' . count($rows) . ' عنوان):</strong> این محصولات دو بار در سایت هستن و آدرسِ یکی‌شون با «-2» تموم می‌شه. نسخه‌ی اضافه رو (معمولاً شماره‌ی بزرگ‌تر) حذف کنید.</p><ul style="list-style:disc;padding-right:20px">';
+    foreach ($rows as $r) {
+        $links = array_map(function ($id) { return '<a href="' . esc_url(get_edit_post_link((int) $id)) . '">#' . (int) $id . '</a>'; }, explode(',', $r->ids));
+        echo '<li>' . esc_html($r->post_title) . ' — ' . implode('، ', $links) . '</li>';
+    }
+    echo '</ul></div>';
+});
