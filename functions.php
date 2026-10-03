@@ -3301,3 +3301,22 @@ add_action('admin_notices', function () {
     }
     echo '</ul></div>';
 });
+
+/* =========================================================================
+ * آدرس‌های فارسیِ قدیمیِ سایتِ قبلی: اگه بعد از همه‌ی ریدایرکت‌ها (دسته، مقاله، محصول)
+ * هنوز صفحه‌ای پیدا نشد، به‌جای 404 کدِ 410 (Gone) برمی‌گرده تا گوگل سریع‌تر از ایندکس
+ * حذفشون کنه. آدرس‌های انگلیسی همون 404ِ عادی رو می‌گیرن.
+ * ========================================================================= */
+add_action('template_redirect', function () {
+    if (!is_404()) return;
+    $path = urldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
+    if (!preg_match('/[^\x00-\x7f]/', $path)) return;
+    status_header(410);
+    nocache_headers();
+    header('X-Robots-Tag: noindex');
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>این صفحه حذف شده | NEXV</title></head>'
+       . '<body style="font-family:Vazirmatn,Tahoma,sans-serif;text-align:center;padding:80px 16px;background:#f3f1f9;color:#201f2b">'
+       . '<h1 style="font-size:20px">این صفحه دیگه وجود نداره</h1><p style="color:#7a7788">آدرسی که باز کردید مربوط به نسخه‌ی قبلیِ سایته.</p>'
+       . '<a href="' . esc_url(home_url('/')) . '" style="display:inline-block;margin-top:14px;padding:10px 22px;border-radius:30px;background:#6a4dff;color:#fff;text-decoration:none">رفتن به فروشگاه NEXV</a></body></html>';
+    exit;
+}, 50);
