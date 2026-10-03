@@ -2966,22 +2966,40 @@ add_action('template_redirect', function () {
  * نوار داینامیکِ پایین برای صفحه‌های مستقل (وبلاگ، مقاله، قوانین، درباره ما)
  * همون ظاهرِ نوارِ صفحه‌ی اصلی؛ دکمه‌ها به بخش‌های فروشگاه می‌برن.
  * ========================================================================= */
+function nexv_static_dock_parts() {
+    static $parts = null;
+    if ($parts !== null) return $parts;
+    $h = (string) @file_get_contents(get_template_directory() . '/site.html');
+    $cut = function ($from, $to, $incTo = false) use ($h) {
+        $a = strpos($h, $from); if ($a === false) return '';
+        $b = strpos($h, $to, $a + strlen($from)); if ($b === false) return '';
+        return substr($h, $a, $b - $a + ($incTo ? strlen($to) : 0));
+    };
+    $vars  = $cut(":root{\n  /* Liquid Glass", "\n}\n", true) . "\n" . $cut("[data-theme=\"dark\"]{\n  --bg:", "\n}\n", true);
+    $dockA = strpos($h, 'DYNAMIC DOCK — نوار پایینِ شناور');
+    $dockA = $dockA !== false ? strrpos(substr($h, 0, $dockA), '/*') : false;
+    $dockB = $dockA !== false ? strpos($h, 'HERO — طراحیِ جدید', $dockA) : false;
+    $dockB = $dockB !== false ? strrpos(substr($h, 0, $dockB), '/*') : false;
+    $dockCss = ($dockA !== false && $dockB !== false) ? substr($h, $dockA, $dockB - $dockA) : '';
+    $kf = '';
+    foreach (['dockJelly', 'bump'] as $k) {
+        if (preg_match('/@keyframes ' . $k . '\s*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/', $h, $m)) $kf .= $m[0] . "\n";
+    }
+    $html = $cut('<div class="nexv-dock" id="nexvDock">', "\n<script>");
+    $js   = $cut('(function initNexvDock(){', "\n})();", true);
+    $parts = compact('vars', 'dockCss', 'kf', 'html', 'js');
+    return $parts;
+}
 function nexv_static_dock_html($active = '') {
-    $home = esc_url(home_url('/'));
-    $ic = [
-        'account' => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8zm0 13.6a7.8 7.8 0 0 1-5.9-2.7c.9-1.9 3.2-3.1 5.9-3.1s5 1.2 5.9 3.1a7.8 7.8 0 0 1-5.9 2.7z"/></svg>',
-        'cart'    => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8 7V6a4 4 0 0 1 8 0v1h2.2a1 1 0 0 1 1 .92l.9 11.5A2.4 2.4 0 0 1 17.7 22H6.3a2.4 2.4 0 0 1-2.4-2.58l.9-11.5A1 1 0 0 1 5.8 7H8zm2 0h4V6a2 2 0 1 0-4 0v1z"/></svg>',
-        'home'    => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M11.3 2.4a1 1 0 0 1 1.4 0l8 7.4a1 1 0 0 1 .3.74V20a2 2 0 0 1-2 2h-4.4v-6.2H9.4V22H5a2 2 0 0 1-2-2v-9.46a1 1 0 0 1 .32-.73l7.98-7.4z"/></svg>',
-        'cats'    => '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="5" r="2.2"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/></svg>',
-    ];
-    $items = [
-        ['account', 'حساب کاربری', $home . 'my-account/'],
-        ['cart', 'سبد خرید', $home . 'cart/'],
-        ['home', 'صفحه اصلی', $home],
-        ['cats', 'دسته‌بندی', $home . '?nexv_open=cats'],
-    ];
+    $home = home_url('/');
+    $d = nexv_static_dock_parts();
     ob_start(); ?>
 <style>
+<?php echo $d['vars']; ?>
+<?php echo $d['dockCss']; ?>
+<?php echo $d['kf']; ?>
+.nexv-dock .search-results{display:none !important;}
+body{padding-bottom:calc(110px + env(safe-area-inset-bottom)) !important;}
 /* پس‌زمینه‌ی ثابت و متحرکِ صفحه‌ی اصلی؛ باکس‌ها به‌صورت شیشه‌ای روش اسکرول می‌شن */
 html, body{background:transparent !important;}
 html{background:#f3f1f9 !important;} html[data-theme="dark"]{background:#08080d !important;}
@@ -3054,54 +3072,30 @@ html[data-theme="dark"] .about-box, html[data-theme="dark"] .rp-card{
   background:rgba(30,30,40,.55) !important; border-color:rgba(255,255,255,.08) !important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 14px 36px rgba(0,0,0,.45) !important;
 }
-.sdock{--h:64px; position:fixed; z-index:90; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
-  width:min(560px, calc(100vw - 20px)); display:flex; gap:10px; direction:ltr; font-family:'Vazirmatn',Tahoma,sans-serif; -webkit-tap-highlight-color:transparent;}
-.sdock-glass{background:rgba(255,255,255,.82); -webkit-backdrop-filter:blur(28px) saturate(200%); backdrop-filter:blur(28px) saturate(200%);
-  border:1px solid rgba(255,255,255,.7); box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 14px 40px rgba(20,10,60,.18), 0 2px 6px rgba(20,10,60,.08);}
-html[data-theme="dark"] .sdock-glass{background:rgba(28,27,38,.82); border-color:rgba(255,255,255,.1); box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 18px 48px rgba(0,0,0,.55);}
-.sdock-pill{flex:1; height:var(--h); border-radius:999px; display:flex; padding:4px;}
-.sdock-item{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border-radius:999px;
-  color:#1d1b29; text-decoration:none; font-size:11.5px; font-weight:600; position:relative; transition:background .25s ease, color .25s ease;}
-html[data-theme="dark"] .sdock-item{color:#ececf4;}
-.sdock-item svg{width:25px; height:25px;}
-.sdock-item.active{color:#6a4dff; background:rgba(106,77,255,.12);}
-.sdock-item:active{transform:scale(.94);}
-.sdock-badge{position:absolute; top:6px; left:calc(50% + 6px); min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#6a4dff; color:#fff;
-  font-size:10.5px; font-weight:800; display:none; align-items:center; justify-content:center; font-style:normal;}
-.sdock-search{width:var(--h); height:var(--h); border-radius:50%; flex:none; display:flex; align-items:center; overflow:hidden; transition:width .5s cubic-bezier(.3,1.35,.5,1);}
-.sdock-search button{width:var(--h); height:var(--h); flex:none; border:0; background:none; color:#1d1b29; display:grid; place-items:center; cursor:pointer; padding:0;}
-html[data-theme="dark"] .sdock-search button{color:#ececf4;}
-.sdock-search svg{width:24px; height:24px;}
-.sdock-search input{flex:1; min-width:0; border:0; outline:0; background:none; font:inherit; font-size:15px; direction:rtl; color:inherit; padding:0 4px 0 14px; opacity:0;}
-.sdock.searching .sdock-pill{display:none;}
-.sdock.searching .sdock-search{width:100%; border-radius:999px;}
-.sdock.searching .sdock-search input{opacity:1;}
-body{padding-bottom:110px !important;}
-@media (max-width:420px){ .sdock-item{font-size:10.5px;} .sdock-item svg{width:23px; height:23px;} }
 </style>
 <div id="nexvBg" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span><span class="blob b4"></span><span class="blob b5"></span></div>
-<div class="sdock" id="sDock">
-  <nav class="sdock-pill sdock-glass" aria-label="منوی اصلی">
-    <?php foreach ($items as $it): ?>
-      <a class="sdock-item<?php echo $active === $it[0] ? ' active' : ''; ?>" href="<?php echo $it[2]; ?>"><?php echo $ic[$it[0]]; ?><span><?php echo $it[1]; ?></span><?php if ($it[0] === 'cart') echo '<i class="sdock-badge" id="sDockBadge"></i>'; ?></a>
-    <?php endforeach; ?>
-  </nav>
-  <form class="sdock-search sdock-glass" id="sDockSearch" action="<?php echo $home; ?>" method="get" role="search">
-    <button type="button" id="sDockSearchBtn" aria-label="جستجو"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg></button>
-    <input type="text" name="nexv_search" placeholder="جستجوی محصول..." autocomplete="off" enterkeyhint="search" aria-label="جستجوی محصول">
-  </form>
-</div>
+<span id="cartCount" style="display:none">0</span>
+<?php echo $d['html']; ?>
 <script>
+/* همون نوارِ صفحه‌ی اصلی؛ اینجا هر گزینه به بخشِ مربوطش در فروشگاه می‌ره */
 (function(){
-  var d=document.getElementById('sDock'), f=document.getElementById('sDockSearch'), inp=f.querySelector('input');
-  document.getElementById('sDockSearchBtn').addEventListener('click', function(){
-    if(d.classList.contains('searching') && inp.value.trim()){ f.submit(); return; }
-    d.classList.toggle('searching'); if(d.classList.contains('searching')) inp.focus();
+  var HOME = <?php echo wp_json_encode($home); ?>;
+  window.HOME_URL = HOME; window.SINGLE_VIEW_ID = 'static';
+  window.currentUser = function(){ return null; };
+  window.openAuth = window.openAccount = function(){ location.href = HOME + 'my-account/'; };
+  window.openDrawer = function(){ location.href = HOME + 'cart/'; };
+  window.renderAdvancedFilter = window.lockBodyScroll = window.renderSearchResults = function(){};
+  try{ var c = JSON.parse(localStorage.getItem('nexv_cart') || '{}'), n = 0; for(var k in c) n += Number(c[k]) || 0;
+       document.getElementById('cartCount').textContent = n; }catch(e){}
+  document.addEventListener('keydown', function(e){
+    var i = document.getElementById('searchInput');
+    if(e.key === 'Enter' && document.activeElement === i && i.value.trim()){
+      location.href = HOME + '?nexv_search=' + encodeURIComponent(i.value.trim());
+    }
   });
-  inp.addEventListener('blur', function(){ if(!inp.value.trim()) setTimeout(function(){ d.classList.remove('searching'); }, 150); });
-  try{ var c=JSON.parse(localStorage.getItem('nexv_cart')||'{}'), n=0; for(var k in c) n+=Number(c[k])||0;
-    var b=document.getElementById('sDockBadge'); if(n>0){ b.textContent=n; b.style.display='flex'; } }catch(e){}
 })();
+var HOME_URL = window.HOME_URL, SINGLE_VIEW_ID = window.SINGLE_VIEW_ID;
+<?php echo $d['js']; ?>
 </script>
 <?php
     return ob_get_clean();
