@@ -3320,3 +3320,23 @@ add_action('template_redirect', function () {
        . '<a href="' . esc_url(home_url('/')) . '" style="display:inline-block;margin-top:14px;padding:10px 22px;border-radius:30px;background:#6a4dff;color:#fff;text-decoration:none">رفتن به فروشگاه NEXV</a></body></html>';
     exit;
 }, 50);
+
+/* =========================================================================
+ * سایت‌مپِ برگه‌ها: سبد/تسویه/حساب/فروشگاه noindex و بیرون از سایت‌مپ؛ «برگه نمونه» حذف
+ * (Rank Math هر برگه‌ای که noindex باشه رو خودش از سایت‌مپ برمی‌داره)
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (get_option('nexv_pages_cleanup_v1') || !current_user_can('manage_options')) return;
+    foreach (nexv_utility_page_slugs() as $slug) {
+        $p = get_page_by_path($slug, OBJECT, 'page');
+        if ($p) update_post_meta($p->ID, 'rank_math_robots', ['noindex', 'follow']);
+    }
+    global $wpdb;
+    $ids = $wpdb->get_col("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND (post_name IN ('sample-page', '" . esc_sql(rawurlencode('برگه-نمونه')) . "', '" . esc_sql(strtolower(rawurlencode('برگه-نمونه'))) . "', 'برگه-نمونه') OR post_title IN ('برگه نمونه', 'Sample Page'))");
+    foreach ($ids as $id) wp_delete_post((int) $id, true);
+    update_option('nexv_pages_cleanup_v1', 1, false);
+});
+add_filter('rank_math/sitemap/exclude_post', function ($exclude, $post) {
+    if ($post && isset($post->post_type) && $post->post_type === 'page' && in_array(urldecode($post->post_name), array_merge(nexv_utility_page_slugs(), ['برگه-نمونه', 'sample-page']), true)) return true;
+    return $exclude;
+}, 20, 2);

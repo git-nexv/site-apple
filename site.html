@@ -1003,6 +1003,12 @@ body{padding-bottom:calc(88px + env(safe-area-inset-bottom));}
 #footer{padding-bottom:6px;}
 .foot-made{text-align:center; padding-top:10px; font-size:12.5px; color:var(--text-dim);}
 .foot-tools{display:flex; align-items:center; gap:14px;}
+/* لینک‌های اصلیِ سایت در فوتر (به گوگل کمک می‌کنه زیرلینک‌های سایت رو در نتایج نشون بده) */
+.foot-nav{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:22px; margin:6px 0 26px;}
+.foot-nav h4{font-size:13.5px; font-weight:800; margin:0 0 10px; color:var(--text);}
+.foot-nav ul{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+.foot-nav a{font-size:13px; color:var(--text-dim); text-decoration:none; transition:color .2s ease;}
+.foot-nav a:hover{color:var(--accent);}
 .foot-tools a{font-size:14.5px; font-weight:700; color:var(--text);}
 .foot-tools a:hover{color:var(--accent);}
 
@@ -1850,6 +1856,7 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
         <p>با عشق کنار مشتری‌هامون هستیم؛ از انتخاب تا بعد از خرید، محصولات اورجینال اپل با گارانتی واقعی و پشتیبانی صمیمانه، همیشه در دسترستون.</p>
       </div>
     </div>
+    <!--NEXV_FOOT_LINKS-->
     <div class="foot-bottom">
       <span>© ۱۴۰۵ NEXV — تمامی حقوق محفوظ است.</span>
       <div class="foot-tools">
