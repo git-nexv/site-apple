@@ -242,6 +242,10 @@ function nexv_transliterate_title_to_slug($title) {
     $map = [
         'ال سی دی' => 'lcd', 'السی\u200cدی' => 'lcd', 'ال‌سی‌دی' => 'lcd',
         'لوازم جانبی' => 'accessories', 'قطعات' => 'parts', 'خرید' => 'buy',
+        'دوربین جلو' => 'front-camera', 'دوربین پشت' => 'rear-camera', 'دوربین' => 'camera',
+        'جلو' => 'front', 'پشت' => 'rear', 'تاچ' => 'touch', 'فلت' => 'flex', 'اسپیکر' => 'speaker',
+        'بلندگو' => 'speaker', 'میکروفون' => 'microphone', 'سوکت شارژ' => 'charging-port', 'سوکت' => 'connector',
+        'شارژر' => 'charger', 'کابل' => 'cable', 'قاب' => 'case', 'گلس' => 'glass', 'لنز' => 'lens',
         'مادربرد' => 'motherboard',
         'باتری' => 'battery',
         'بدنه (شاسی)' => 'body', 'بدنه(شاسی)' => 'body', 'بدنه' => 'body', 'شاسی' => 'chassis',
@@ -290,7 +294,7 @@ add_filter('wp_insert_post_data', function ($data, $postarr) {
            وجودِ «%» یعنی هنوز انگلیسیِ خوانا نیست و باید نویسه‌گردانی بشه. */
         $alreadyAscii = $data['post_name'] !== '' && strpos($data['post_name'], '%') === false && $data['post_name'] === sanitize_title($data['post_name']) && !preg_match('/[^\x00-\x7f]/', $data['post_name']);
         if (!$alreadyAscii) {
-            $baseSlug = nexv_transliterate_title_to_slug($data['post_title']);
+            $baseSlug = nexv_slug_from_title($data['post_title']);
             $postId = isset($postarr['ID']) ? (int) $postarr['ID'] : 0;
             $data['post_name'] = wp_unique_post_slug($baseSlug, $postId, $data['post_status'], $data['post_type'], $data['post_parent'] ?? 0);
         }
@@ -3171,3 +3175,72 @@ html[data-theme="dark"] .rp-img.has{background:#1f1e29;}
 <?php
     return ob_get_clean();
 }
+
+/* =========================================================================
+ * پیوند یکتای انگلیسیِ محصولات و مقالات از روی بخشِ انگلیسیِ عنوان
+ * عنوان‌ها به شکلِ «فارسی | English» هستن؛ بخشِ بعد از «|» دقیق‌ترین منبع برای
+ * پیوندِ انگلیسیه (مثلاً «دوربین جلو آیفون ۵ | iPhone 5 Front Camera» → iphone-5-front-camera).
+ * اگه عنوان بخشِ انگلیسی نداشت، از جدولِ ترجمه‌ی فارسی-به-انگلیسی استفاده می‌شه.
+ * ========================================================================= */
+function nexv_slug_from_title($title) {
+    $title = (string) $title;
+    if (strpos($title, '|') !== false) {
+        $en = trim(substr($title, strrpos($title, '|') + 1));
+        if (preg_match('/[A-Za-z]/', $en) && !preg_match('/[^\x00-\x7f]/', $en)) {
+            $en = str_replace('.', '-', $en);
+            $en = strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', $en));
+            $en = trim(preg_replace('/-+/', '-', $en), '-');
+            if ($en !== '') return $en;
+        }
+    }
+    return nexv_transliterate_title_to_slug($title);
+}
+
+/* اصلاحِ یک‌باره‌ی پیوندِ همه‌ی محصولات (به درخواستِ مدیر سایت). پیوندِ قدیمی در
+   _wp_old_slug ذخیره می‌شه تا با ۳۰۱ به پیوندِ جدید بره و اعتبارِ گوگل حفظ بشه. */
+add_action('admin_init', function () {
+    if (get_option('nexv_product_slugs_en_v2') || !current_user_can('manage_options')) return;
+    @set_time_limit(0);
+    global $wpdb;
+    $rows = $wpdb->get_results("SELECT ID, post_title, post_name, post_status FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_status IN ('publish','draft','pending','private','future') ORDER BY ID ASC");
+    $changed = 0; $same = 0; $examples = [];
+    foreach ($rows as $r) {
+        $want = nexv_slug_from_title($r->post_title);
+        if ($want === '' ) continue;
+        $cur = urldecode($r->post_name);
+        if ($cur === $want) { $same++; continue; }
+        $new = wp_unique_post_slug($want, (int) $r->ID, 'publish', 'nexv_product', 0);
+        if ($new === $cur) { $same++; continue; }
+        $wpdb->update($wpdb->posts, ['post_name' => $new], ['ID' => (int) $r->ID]);
+        if ($r->post_name !== '' && $r->post_status === 'publish') add_post_meta((int) $r->ID, '_wp_old_slug', $r->post_name);
+        clean_post_cache((int) $r->ID);
+        $changed++;
+        if (count($examples) < 6) $examples[] = $cur . ' → ' . $new;
+    }
+    delete_transient('nexv_products_cache_v2');
+    flush_rewrite_rules();
+    update_option('nexv_product_slugs_en_v2', 1, false);
+    set_transient('nexv_slug_fix_report', ['changed' => $changed, 'same' => $same, 'examples' => $examples], DAY_IN_SECONDS);
+});
+add_action('admin_notices', function () {
+    $r = get_transient('nexv_slug_fix_report');
+    if (!$r || !current_user_can('manage_options')) return;
+    delete_transient('nexv_slug_fix_report');
+    echo '<div class="notice notice-success is-dismissible"><p><strong>NEXV — پیوند یکتای محصولات:</strong> ' . (int) $r['changed'] . ' محصول اصلاح شد، ' . (int) $r['same'] . ' محصول از قبل درست بود. لینک‌های قدیمی با ۳۰۱ به لینکِ جدید می‌رن.</p>';
+    if ($r['examples']) { echo '<ul style="direction:ltr;text-align:left;list-style:disc;padding-left:20px">'; foreach ($r['examples'] as $e) echo '<li><code>' . esc_html($e) . '</code></li>'; echo '</ul>'; }
+    echo '</div>';
+});
+
+/* ریدایرکتِ ۳۰۱ لینک‌های قدیمیِ محصول (پشتیبانِ ریدایرکتِ خودِ وردپرس) */
+add_action('template_redirect', function () {
+    if (!is_404()) return;
+    $path = urldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
+    if (!preg_match('#/product/([^/]+)/?$#u', $path, $m)) return;
+    global $wpdb;
+    $old = $m[1];
+    $id = $wpdb->get_var($wpdb->prepare(
+        "SELECT p.ID FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_key = '_wp_old_slug' AND (m.meta_value = %s OR m.meta_value = %s) AND p.post_type = 'nexv_product' AND p.post_status = 'publish' LIMIT 1",
+        $old, strtolower(rawurlencode($old))
+    ));
+    if ($id) { wp_redirect(get_permalink((int) $id), 301); exit; }
+}, 2);
