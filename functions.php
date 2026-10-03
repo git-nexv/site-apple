@@ -3340,3 +3340,31 @@ add_filter('rank_math/sitemap/exclude_post', function ($exclude, $post) {
     if ($post && isset($post->post_type) && $post->post_type === 'page' && in_array(urldecode($post->post_name), array_merge(nexv_utility_page_slugs(), ['برگه-نمونه', 'sample-page']), true)) return true;
     return $exclude;
 }, 20, 2);
+
+/* سایت‌مپِ برگه‌ها (نسخه‌ی ۲): شناسه‌ی برگه‌های کمکی به تنظیمِ «Exclude Posts» خودِ Rank Math
+   اضافه می‌شه (همون فیلدی که در تنظیمات نقشه سایت ← عمومی هست)، برگه‌ی نمونه حذف می‌شه
+   و کشِ سایت‌مپِ Rank Math پاک می‌شه تا تغییر همون لحظه دیده بشه. */
+function nexv_flush_rank_math_sitemap() {
+    if (class_exists('\RankMath\Sitemap\Cache')) { try { \RankMath\Sitemap\Cache::invalidate_storage(); } catch (\Throwable $e) {} }
+    global $wpdb;
+    $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_rank\_math\_sitemap%' OR option_name LIKE '\_transient\_timeout\_rank\_math\_sitemap%' OR option_name LIKE '%rank_math%sitemap%cache%'");
+}
+add_action('admin_init', function () {
+    if (get_option('nexv_pages_cleanup_v2') || !current_user_can('manage_options')) return;
+    global $wpdb;
+    $samples = $wpdb->get_col("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'page' AND (post_title IN ('برگه نمونه', 'Sample Page') OR post_name = 'sample-page' OR post_name LIKE '%25d8%25a8%25d8%25b1%25da%25af%25d9%2587-%' OR post_name LIKE '%D8%A8%D8%B1%DA%AF%D9%87-%')");
+    foreach ($samples as $id) wp_delete_post((int) $id, true);
+    $ids = [];
+    foreach (nexv_utility_page_slugs() as $slug) {
+        $p = get_page_by_path($slug, OBJECT, 'page');
+        if ($p) { $ids[] = (int) $p->ID; update_post_meta($p->ID, 'rank_math_robots', ['noindex', 'follow']); }
+    }
+    $opt = get_option('rank-math-options-sitemap', []);
+    if (is_array($opt) && $ids) {
+        $cur = array_filter(array_map('intval', preg_split('/\s*,\s*/', (string) ($opt['exclude_posts'] ?? ''))));
+        $opt['exclude_posts'] = implode(',', array_values(array_unique(array_merge($cur, $ids))));
+        update_option('rank-math-options-sitemap', $opt);
+    }
+    nexv_flush_rank_math_sitemap();
+    update_option('nexv_pages_cleanup_v2', 1, false);
+}, 40);
