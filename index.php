@@ -53,7 +53,7 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
             html[data-theme="dark"] .article-page .back{color:#9a97ad;}
             html[data-theme="dark"] .article-page .body-content{background:#15141c; color:#d5d3e0; box-shadow:0 14px 34px rgba(0,0,0,.5);}
             /* ورودِ نرمِ صفحه، هماهنگ با بقیه‌ی سایت */
-            @keyframes nexvEnter{from{opacity:.35; transform:translateY(6px);} to{opacity:1; transform:none;}}
+            @keyframes nexvEnter{from{opacity:.35;} to{opacity:1;}} /* فقط opacity؛ transform روی body باعث می‌شد نوارِ پایین و پس‌زمینه پین نمونن */
             body{animation:nexvEnter .38s cubic-bezier(.16,1,.3,1) both;}
             @media (prefers-reduced-motion: reduce){ body{animation:none;} }
         </style>
@@ -65,7 +65,6 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
             <h1><?php echo esc_html($atitle); ?></h1>
             <div class="body-content"><?php echo $acontent; ?></div>
         </div>
-        <?php echo nexv_related_products_html(nexv_related_products_for_text($atitle . ' ' . wp_trim_words(wp_strip_all_tags($acontent), 60)), 'محصولات مرتبط با این مقاله'); ?>
         <?php echo nexv_static_dock_html(); ?>
     </body>
     </html>
@@ -113,7 +112,7 @@ if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_articl
             html[data-theme="dark"] .blog-card{background:#15141c; box-shadow:0 12px 26px rgba(0,0,0,.5);}
             html[data-theme="dark"] .blog-card p{color:#9a97ad;}
             /* ورودِ نرمِ صفحه، هماهنگ با بقیه‌ی سایت */
-            @keyframes nexvEnter{from{opacity:.35; transform:translateY(6px);} to{opacity:1; transform:none;}}
+            @keyframes nexvEnter{from{opacity:.35;} to{opacity:1;}} /* فقط opacity؛ transform روی body باعث می‌شد نوارِ پایین و پس‌زمینه پین نمونن */
             body{animation:nexvEnter .38s cubic-bezier(.16,1,.3,1) both;}
             @media (prefers-reduced-motion: reduce){ body{animation:none;} }
         </style>
@@ -233,7 +232,7 @@ if (function_exists('is_page') && is_page('terms')) {
             html[data-theme="dark"] .rule h2 i{background:#241f38; color:#b6a2ff;}
             html[data-theme="dark"] .terms-note{background:#241f38; color:#cfc2ff;}
             html[data-theme="dark"] .terms-note a{color:#cfc2ff;}
-            @keyframes nexvEnter{from{opacity:.35; transform:translateY(6px);} to{opacity:1; transform:none;}}
+            @keyframes nexvEnter{from{opacity:.35;} to{opacity:1;}} /* فقط opacity؛ transform روی body باعث می‌شد نوارِ پایین و پس‌زمینه پین نمونن */
             body{animation:nexvEnter .38s cubic-bezier(.16,1,.3,1) both;}
             @media (prefers-reduced-motion: reduce){ body{animation:none;} }
         </style>
@@ -305,7 +304,7 @@ if (function_exists('is_page') && is_page('about')) {
             .about-links a{padding:10px 18px; border-radius:10px; background:#f2f0fb; color:#6a4dff; font-size:13.5px; text-decoration:none; font-weight:700;}
             .about-back{display:inline-block; margin-top:22px; font-size:12.5px; color:#7a7788; text-decoration:none;}
             /* ورودِ نرمِ صفحه، هماهنگ با بقیه‌ی سایت */
-            @keyframes nexvEnter{from{opacity:.35; transform:translateY(6px);} to{opacity:1; transform:none;}}
+            @keyframes nexvEnter{from{opacity:.35;} to{opacity:1;}} /* فقط opacity؛ transform روی body باعث می‌شد نوارِ پایین و پس‌زمینه پین نمونن */
             body{animation:nexvEnter .38s cubic-bezier(.16,1,.3,1) both;}
             @media (prefers-reduced-motion: reduce){ body{animation:none;} }
         </style>
