@@ -564,6 +564,69 @@ if (function_exists('has_site_icon') && has_site_icon()) {
     if ($icon32) $inject .= '<link rel="shortcut icon" href="' . esc_url($icon32 . $ver) . '">';
 }
 
+/* ---------- سئوی صفحه‌های اپلیکیشنِ اصلی (صفحه‌ی اصلی، محصول، دسته) ----------
+   این قالب wp_head() رو صدا نمی‌زنه، برای همین تا الان توضیحات متا، canonical، تگ‌های
+   شبکه‌های اجتماعی و اسکیمای Rank Math روی صفحه‌ی محصول‌ها اصلاً چاپ نمی‌شد و گوگل
+   فقط یه صفحه‌ی تقریباً خالی (که با جاوااسکریپت پر می‌شه) می‌دید. حالا خروجیِ سرِ صفحه‌ی
+   Rank Math مستقیم اضافه می‌شه، به‌علاوه‌ی اسکیمای محصول و نسخه‌ی HTMLِ محتوای صفحه. */
+$seo_head = '';
+if (has_action('rank_math/head')) { ob_start(); do_action('rank_math/head'); $seo_head = (string) ob_get_clean(); }
+$qid = function_exists('get_queried_object_id') ? get_queried_object_id() : 0;
+$is_prod = function_exists('is_singular') && is_singular('nexv_product') && $qid;
+$is_cat  = function_exists('is_tax') && is_tax('nexv_cat');
+$canon = $is_prod ? get_permalink($qid) : ($is_cat ? get_term_link(get_queried_object()) : (is_front_page() || is_home() ? home_url('/') : ''));
+if (is_wp_error($canon)) $canon = '';
+if (stripos($seo_head, 'rel="canonical"') === false && $canon) $seo_head .= '<link rel="canonical" href="' . esc_url($canon) . '">';
+if (stripos($seo_head, 'name="description"') === false) {
+    $desc = '';
+    if ($is_prod) $desc = (string) get_post_meta($qid, '_nexv_short_desc', true) ?: wp_strip_all_tags(get_post_field('post_content', $qid));
+    elseif (!$is_cat) $desc = 'فروشگاه تخصصی قطعات و محصولات اپل؛ باتری، ال سی دی، مادربرد و دوربین آیفون، آیپد و اپل واچ با گارانتی.';
+    if ($desc !== '') $seo_head .= '<meta name="description" content="' . esc_attr(wp_trim_words(wp_strip_all_tags($desc), 30, '...')) . '">';
+} else {
+    $inject = preg_replace('#<meta name="description"[^>]*>#', '', $inject); // تکراری نشه
+}
+$ssr = '';
+if ($is_prod) {
+    $p_title = get_the_title($qid);
+    $p_desc  = wp_strip_all_tags((string) get_post_meta($qid, '_nexv_short_desc', true));
+    $p_imgs  = function_exists('nexv_gallery_urls') ? array_values(array_filter(nexv_gallery_urls($qid))) : [];
+    $p_vp    = function_exists('nexv_variant_prices') ? array_values(nexv_variant_prices($qid)) : [];
+    $p_base  = (int) get_post_meta($qid, '_nexv_price', true);
+    $p_all   = array_filter(array_merge($p_vp, $p_base > 0 ? [$p_base] : []));
+    $schema  = ['@context' => 'https://schema.org', '@type' => 'Product', 'name' => $p_title, 'url' => get_permalink($qid),
+                'description' => $p_desc ?: wp_trim_words(wp_strip_all_tags(get_post_field('post_content', $qid)), 40, '...'),
+                'brand' => ['@type' => 'Brand', 'name' => 'Apple']];
+    if ($p_imgs) $schema['image'] = $p_imgs;
+    if ($p_all) $schema['offers'] = ['@type' => 'AggregateOffer', 'priceCurrency' => 'IRR', 'lowPrice' => min($p_all) * 10, 'highPrice' => max($p_all) * 10,
+                                     'offerCount' => count($p_all), 'availability' => 'https://schema.org/InStock', 'url' => get_permalink($qid)];
+    if (stripos($seo_head, '"Product"') === false) $seo_head .= '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
+    /* نسخه‌ی HTMLِ محتوا برای خزنده‌ها؛ به‌محضِ اجرای جاوااسکریپت، نسخه‌ی کاملِ صفحه جاش رو می‌گیره */
+    $terms = get_the_terms($qid, 'nexv_cat');
+    $crumbs = '';
+    if ($terms && !is_wp_error($terms)) {
+        foreach (array_reverse(get_ancestors($terms[0]->term_id, 'nexv_cat')) as $aid) { $t = get_term($aid, 'nexv_cat'); if ($t) $crumbs .= '<a href="' . esc_url(get_term_link($t)) . '">' . esc_html($t->name) . '</a> › '; }
+        $crumbs .= '<a href="' . esc_url(get_term_link($terms[0])) . '">' . esc_html($terms[0]->name) . '</a>';
+    }
+    $ssr = '<main id="nexvSsr"><nav>' . $crumbs . '</nav><h1>' . esc_html($p_title) . '</h1>'
+         . ($p_imgs ? '<img src="' . esc_url($p_imgs[0]) . '" alt="' . esc_attr($p_title) . '" width="600" height="600">' : '')
+         . ($p_desc ? '<p>' . esc_html($p_desc) . '</p>' : '')
+         . '<div>' . apply_filters('the_content', get_post_field('post_content', $qid)) . '</div></main>';
+} elseif ($is_cat) {
+    $term = get_queried_object();
+    $ids = get_posts(['post_type' => 'nexv_product', 'post_status' => 'publish', 'numberposts' => 200, 'fields' => 'ids',
+                      'tax_query' => [['taxonomy' => 'nexv_cat', 'terms' => (int) $term->term_id, 'include_children' => true]]]);
+    $kids = get_terms(['taxonomy' => 'nexv_cat', 'parent' => (int) $term->term_id, 'hide_empty' => true]);
+    $ssr = '<main id="nexvSsr"><h1>' . esc_html($term->name) . '</h1><ul>';
+    if ($kids && !is_wp_error($kids)) foreach ($kids as $k) $ssr .= '<li><a href="' . esc_url(get_term_link($k)) . '">' . esc_html($k->name) . '</a></li>';
+    foreach ($ids as $pid) $ssr .= '<li><a href="' . esc_url(get_permalink($pid)) . '">' . esc_html(get_the_title($pid)) . '</a></li>';
+    $ssr .= '</ul></main>';
+}
+if ($ssr !== '') {
+    $ssr = '<style>#nexvSsr{max-width:900px;margin:30px auto;padding:0 16px;font-family:Vazirmatn,Tahoma,sans-serif}#nexvSsr img{max-width:100%;height:auto}</style>'
+         . $ssr . '<script>(function(){var e=document.getElementById("nexvSsr");if(e)e.remove();})();</script>';
+    $html = preg_replace_callback('#<body([^>]*)>#i', function ($m) use ($ssr) { return $m[0] . $ssr; }, $html, 1);
+}
+$inject = $seo_head . $inject;
 $html = str_replace('<head>', "<head>\n" . $inject, $html);
 
 /* ---------- نوار مدیریت وردپرس (Admin Bar) ----------
