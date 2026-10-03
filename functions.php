@@ -2931,3 +2931,176 @@ add_action('admin_init', function () {
     update_option('nexv_cat_fix_v3', 1, false);
     set_transient('nexv_cat_fix_report', $log, DAY_IN_SECONDS);
 }, 32);
+
+/* =========================================================================
+ * لوگوی سایت (logo.png در پوشه‌ی قالب) — برای صفحه‌های مستقل و آیکونِ تب
+ * ========================================================================= */
+function nexv_logo_url() { return get_template_directory_uri() . '/logo.png'; }
+function nexv_favicon_tags() {
+    $u = esc_url(nexv_logo_url());
+    return '<link rel="icon" type="image/png" href="' . $u . '"><link rel="apple-touch-icon" href="' . $u . '">';
+}
+/* اگه در وردپرس «نماد سایت» تنظیم نشده، همین لوگو آیکونِ تب و گوگل می‌شه */
+add_action('wp_head', function () { if (!has_site_icon()) echo nexv_favicon_tags(); }, 2);
+
+/* =========================================================================
+ * حذفِ نوشته‌ی پیش‌فرضِ «سلام دنیا!» وردپرس (یک‌بار) + ریدایرکتِ ۳۰۱ آدرسش
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (get_option('nexv_hello_removed') || !current_user_can('manage_options')) return;
+    foreach (['hello-world', 'سلام-دنیا', rawurlencode('سلام-دنیا')] as $slug) {
+        $p = get_page_by_path($slug, OBJECT, 'post');
+        if ($p) wp_delete_post($p->ID, true);
+    }
+    global $wpdb;
+    $ids = $wpdb->get_col("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'post' AND post_title IN ('سلام دنیا!', 'Hello world!')");
+    foreach ($ids as $id) wp_delete_post((int) $id, true);
+    update_option('nexv_hello_removed', 1, false);
+});
+add_action('template_redirect', function () {
+    $path = urldecode((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH));
+    if (preg_match('#/(سلام-دنیا|hello-world)/?$#u', $path)) { wp_redirect(home_url('/'), 301); exit; }
+}, 0);
+
+/* =========================================================================
+ * نوار داینامیکِ پایین برای صفحه‌های مستقل (وبلاگ، مقاله، قوانین، درباره ما)
+ * همون ظاهرِ نوارِ صفحه‌ی اصلی؛ دکمه‌ها به بخش‌های فروشگاه می‌برن.
+ * ========================================================================= */
+function nexv_static_dock_html($active = '') {
+    $home = esc_url(home_url('/'));
+    $ic = [
+        'account' => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 4.2a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8zm0 13.6a7.8 7.8 0 0 1-5.9-2.7c.9-1.9 3.2-3.1 5.9-3.1s5 1.2 5.9 3.1a7.8 7.8 0 0 1-5.9 2.7z"/></svg>',
+        'cart'    => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M8 7V6a4 4 0 0 1 8 0v1h2.2a1 1 0 0 1 1 .92l.9 11.5A2.4 2.4 0 0 1 17.7 22H6.3a2.4 2.4 0 0 1-2.4-2.58l.9-11.5A1 1 0 0 1 5.8 7H8zm2 0h4V6a2 2 0 1 0-4 0v1z"/></svg>',
+        'home'    => '<svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M11.3 2.4a1 1 0 0 1 1.4 0l8 7.4a1 1 0 0 1 .3.74V20a2 2 0 0 1-2 2h-4.4v-6.2H9.4V22H5a2 2 0 0 1-2-2v-9.46a1 1 0 0 1 .32-.73l7.98-7.4z"/></svg>',
+        'cats'    => '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="5" r="2.2"/><circle cx="12" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/></svg>',
+    ];
+    $items = [
+        ['account', 'حساب کاربری', $home . 'my-account/'],
+        ['cart', 'سبد خرید', $home . 'cart/'],
+        ['home', 'صفحه اصلی', $home],
+        ['cats', 'دسته‌بندی', $home . '?nexv_open=cats'],
+    ];
+    ob_start(); ?>
+<style>
+.sdock{--h:64px; position:fixed; z-index:90; left:50%; bottom:calc(12px + env(safe-area-inset-bottom)); transform:translateX(-50%);
+  width:min(560px, calc(100vw - 20px)); display:flex; gap:10px; direction:ltr; font-family:'Vazirmatn',Tahoma,sans-serif; -webkit-tap-highlight-color:transparent;}
+.sdock-glass{background:rgba(255,255,255,.82); -webkit-backdrop-filter:blur(28px) saturate(200%); backdrop-filter:blur(28px) saturate(200%);
+  border:1px solid rgba(255,255,255,.7); box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 14px 40px rgba(20,10,60,.18), 0 2px 6px rgba(20,10,60,.08);}
+html[data-theme="dark"] .sdock-glass{background:rgba(28,27,38,.82); border-color:rgba(255,255,255,.1); box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 18px 48px rgba(0,0,0,.55);}
+.sdock-pill{flex:1; height:var(--h); border-radius:999px; display:flex; padding:4px;}
+.sdock-item{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border-radius:999px;
+  color:#1d1b29; text-decoration:none; font-size:11.5px; font-weight:600; position:relative; transition:background .25s ease, color .25s ease;}
+html[data-theme="dark"] .sdock-item{color:#ececf4;}
+.sdock-item svg{width:25px; height:25px;}
+.sdock-item.active{color:#6a4dff; background:rgba(106,77,255,.12);}
+.sdock-item:active{transform:scale(.94);}
+.sdock-badge{position:absolute; top:6px; left:calc(50% + 6px); min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#6a4dff; color:#fff;
+  font-size:10.5px; font-weight:800; display:none; align-items:center; justify-content:center; font-style:normal;}
+.sdock-search{width:var(--h); height:var(--h); border-radius:50%; flex:none; display:flex; align-items:center; overflow:hidden; transition:width .5s cubic-bezier(.3,1.35,.5,1);}
+.sdock-search button{width:var(--h); height:var(--h); flex:none; border:0; background:none; color:#1d1b29; display:grid; place-items:center; cursor:pointer; padding:0;}
+html[data-theme="dark"] .sdock-search button{color:#ececf4;}
+.sdock-search svg{width:24px; height:24px;}
+.sdock-search input{flex:1; min-width:0; border:0; outline:0; background:none; font:inherit; font-size:15px; direction:rtl; color:inherit; padding:0 4px 0 14px; opacity:0;}
+.sdock.searching .sdock-pill{display:none;}
+.sdock.searching .sdock-search{width:100%; border-radius:999px;}
+.sdock.searching .sdock-search input{opacity:1;}
+body{padding-bottom:110px !important;}
+@media (max-width:420px){ .sdock-item{font-size:10.5px;} .sdock-item svg{width:23px; height:23px;} }
+</style>
+<div class="sdock" id="sDock">
+  <nav class="sdock-pill sdock-glass" aria-label="منوی اصلی">
+    <?php foreach ($items as $it): ?>
+      <a class="sdock-item<?php echo $active === $it[0] ? ' active' : ''; ?>" href="<?php echo $it[2]; ?>"><?php echo $ic[$it[0]]; ?><span><?php echo $it[1]; ?></span><?php if ($it[0] === 'cart') echo '<i class="sdock-badge" id="sDockBadge"></i>'; ?></a>
+    <?php endforeach; ?>
+  </nav>
+  <form class="sdock-search sdock-glass" id="sDockSearch" action="<?php echo $home; ?>" method="get" role="search">
+    <button type="button" id="sDockSearchBtn" aria-label="جستجو"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6"/></svg></button>
+    <input type="text" name="nexv_search" placeholder="جستجوی محصول..." autocomplete="off" enterkeyhint="search" aria-label="جستجوی محصول">
+  </form>
+</div>
+<script>
+(function(){
+  var d=document.getElementById('sDock'), f=document.getElementById('sDockSearch'), inp=f.querySelector('input');
+  document.getElementById('sDockSearchBtn').addEventListener('click', function(){
+    if(d.classList.contains('searching') && inp.value.trim()){ f.submit(); return; }
+    d.classList.toggle('searching'); if(d.classList.contains('searching')) inp.focus();
+  });
+  inp.addEventListener('blur', function(){ if(!inp.value.trim()) setTimeout(function(){ d.classList.remove('searching'); }, 150); });
+  try{ var c=JSON.parse(localStorage.getItem('nexv_cart')||'{}'), n=0; for(var k in c) n+=Number(c[k])||0;
+    var b=document.getElementById('sDockBadge'); if(n>0){ b.textContent=n; b.style.display='flex'; } }catch(e){}
+})();
+</script>
+<?php
+    return ob_get_clean();
+}
+
+/* =========================================================================
+ * محصولاتِ مرتبط با یک مقاله (بر اساسِ کلمه‌های عنوانِ مقاله)
+ * ========================================================================= */
+function nexv_related_products_for_text($text, $limit = 8) {
+    $n = nexv_norm_fa($text);
+    $devices = ['آیفون' => 'آیفون', 'iphone' => 'آیفون', 'آیپد' => 'آیپد', 'ipad' => 'آیپد', 'اپلواچ' => 'اپلواچ', 'applewatch' => 'اپلواچ', 'ایرپاد' => 'ایرپاد', 'مکبوک' => 'مکبوک'];
+    $parts = ['باتری', 'السیدی', 'مادربرد', 'دوربین', 'بدنه', 'تاچ', 'اسپیکر', 'شارژر', 'کابل', 'قاب', 'گلس', 'فلت'];
+    $dev = ''; foreach ($devices as $k => $v) { if (mb_strpos($n, $k) !== false) { $dev = $v; break; } }
+    $foundParts = array_values(array_filter($parts, function ($p) use ($n) { return mb_strpos($n, $p) !== false; }));
+    preg_match_all('/\d+/', nexv_norm_fa($text), $m);
+    $nums = array_unique($m[0]);
+    $products = get_posts(['post_type' => 'nexv_product', 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids']);
+    $scored = [];
+    foreach ($products as $pid) {
+        $t = nexv_norm_fa(get_the_title($pid));
+        $s = 0;
+        if ($dev !== '' && mb_strpos($t, $dev) !== false) $s += 3;
+        foreach ($foundParts as $p) if (mb_strpos($t, $p) !== false) $s += 4;
+        foreach ($nums as $num) if (preg_match('/(?<!\d)' . $num . '(?!\d)/', $t)) $s += 2;
+        if ($s >= 3) $scored[$pid] = $s + (has_post_thumbnail($pid) ? 0.5 : 0);
+    }
+    arsort($scored);
+    return array_slice(array_keys($scored), 0, $limit);
+}
+function nexv_related_products_html($ids, $title = 'محصولات مرتبط') {
+    if (!$ids) return '';
+    ob_start(); ?>
+<style>
+.rp-wrap{max-width:960px; margin:34px auto 0;}
+.rp-wrap h2{font-size:19px; margin:0 4px 14px; font-weight:800;}
+.rp-track{display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory; padding:4px 4px 18px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.rp-track::-webkit-scrollbar{display:none;}
+.rp-card{flex:0 0 200px; scroll-snap-align:start; background:#fff; border:1px solid rgba(255,255,255,.7); border-radius:22px; padding:14px; text-decoration:none; color:inherit;
+  display:flex; flex-direction:column; box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 12px 28px rgba(20,10,60,.08); transition:transform .3s ease;}
+.rp-card:hover{transform:translateY(-4px);}
+.rp-img{width:100%; aspect-ratio:1/1; border-radius:14px; overflow:hidden; display:grid; place-items:center; margin-bottom:12px;
+  background:linear-gradient(160deg,#6a4dff 0%, rgba(106,77,255,.25) 120%);}
+.rp-img img{width:100%; height:100%; object-fit:cover; display:block;}
+.rp-img.has{background:#f1f0f6;}
+.rp-img svg{width:46px; height:46px; stroke:#fff;}
+.rp-card h3{font-size:14px; line-height:1.6; margin:0 0 8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:3.2em;}
+.rp-price{margin-top:auto; font-weight:800; font-size:14.5px;}
+.rp-price small{font-size:11px; color:#7a7788; font-weight:400; margin-right:3px;}
+.rp-price .call{font-size:12px; color:#6a4dff;}
+html[data-theme="dark"] .rp-card{background:#15141c; border-color:rgba(255,255,255,.08); box-shadow:0 12px 28px rgba(0,0,0,.45);}
+html[data-theme="dark"] .rp-img.has{background:#1f1e29;}
+</style>
+<section class="rp-wrap">
+  <h2><?php echo esc_html($title); ?></h2>
+  <div class="rp-track">
+  <?php foreach ($ids as $pid):
+      $img = get_the_post_thumbnail_url($pid, 'medium');
+      if (!$img && function_exists('nexv_gallery_urls')) { $g = nexv_gallery_urls($pid); $img = $g[0] ?? ''; }
+      $price = (int) get_post_meta($pid, '_nexv_price', true);
+      $vp = function_exists('nexv_variant_prices') ? array_values(nexv_variant_prices($pid)) : [];
+      $all = array_filter(array_merge($vp, $price > 0 ? [$price] : []));
+      $min = $all ? min($all) : 0;
+      $varies = $all && max($all) !== $min;
+  ?>
+    <a class="rp-card" href="<?php echo esc_url(get_permalink($pid)); ?>">
+      <div class="rp-img<?php echo $img ? ' has' : ''; ?>"><?php if ($img): ?><img src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr(get_the_title($pid)); ?>" loading="lazy"><?php else: ?><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><?php endif; ?></div>
+      <h3><?php echo esc_html(get_the_title($pid)); ?></h3>
+      <div class="rp-price"><?php if ($min): echo ($varies ? 'از ' : '') . esc_html(number_format($min)) . '<small>تومان</small>'; else: ?><span class="call">برای دریافت قیمت تماس بگیرید</span><?php endif; ?></div>
+    </a>
+  <?php endforeach; ?>
+  </div>
+</section>
+<?php
+    return ob_get_clean();
+}

@@ -30,6 +30,7 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
         <script>(function(){try{var t=localStorage.getItem('nexv_theme'); if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();</script>
         <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}</style>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php echo function_exists('nexv_favicon_tags') ? nexv_favicon_tags() : ''; ?>
         <title><?php echo esc_html($atitle); ?> | وبلاگ NEXV</title>
         <meta name="description" content="<?php echo esc_attr(wp_trim_words(wp_strip_all_tags($acontent), 30)); ?>">
         <link rel="canonical" href="<?php echo esc_url(get_permalink($aid)); ?>">
@@ -64,6 +65,8 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
             <h1><?php echo esc_html($atitle); ?></h1>
             <div class="body-content"><?php echo $acontent; ?></div>
         </div>
+        <?php echo nexv_related_products_html(nexv_related_products_for_text($atitle . ' ' . wp_trim_words(wp_strip_all_tags($acontent), 60)), 'محصولات مرتبط با این مقاله'); ?>
+        <?php echo nexv_static_dock_html(); ?>
     </body>
     </html>
     <?php
@@ -83,6 +86,7 @@ if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_articl
         <script>(function(){try{var t=localStorage.getItem('nexv_theme'); if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();</script>
         <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}</style>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php echo function_exists('nexv_favicon_tags') ? nexv_favicon_tags() : ''; ?>
         <title>مقالات آموزشی | NEXV</title>
         <meta name="description" content="مجموعه مقالات آموزشی درباره باتری، قطعات و نگهداری آیفون و آیپد.">
         <link rel="canonical" href="<?php echo esc_url(get_post_type_archive_link('nexv_article')); ?>">
@@ -133,6 +137,7 @@ if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_articl
                 <?php endforeach; ?>
             </div>
         </div>
+        <?php echo nexv_static_dock_html(); ?>
     </body>
     </html>
     <?php
@@ -193,6 +198,7 @@ if (function_exists('is_page') && is_page('terms')) {
         <script>(function(){try{var t=localStorage.getItem('nexv_theme'); if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();</script>
         <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}</style>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php echo function_exists('nexv_favicon_tags') ? nexv_favicon_tags() : ''; ?>
         <title>قوانین و مقررات | NEXV</title>
         <meta name="description" content="قوانین خرید از فروشگاه NEXV؛ شرایط قیمت‌گذاری و لغو سفارش، پرداخت، ارسال، گارانتی و مرجوعی قطعات اورجینال اپل.">
         <link rel="canonical" href="<?php echo esc_url(get_permalink()); ?>">
@@ -204,7 +210,7 @@ if (function_exists('is_page') && is_page('terms')) {
         <style>
             body{font-family:'Vazirmatn',Tahoma,sans-serif; background:#f7f6fb; margin:0; padding:40px 16px 60px; color:#201f2b;}
             .terms-box{max-width:760px; margin:0 auto; background:#fff; border-radius:24px; padding:38px 30px 30px; box-shadow:0 20px 50px rgba(0,0,0,.08);}
-            .terms-logo{width:52px; height:52px; border-radius:15px; margin:0 auto 16px; background:linear-gradient(135deg,#6a4dff,#8f6bff);}
+            .terms-logo{width:52px; height:52px; border-radius:15px; margin:0 auto 16px; display:block; object-fit:cover; box-shadow:0 10px 24px rgba(20,10,60,.18);}
             .terms-box h1{font-size:23px; margin:0 0 6px; text-align:center;}
             .terms-box .tagline{color:#7a7788; font-size:13px; margin:0 0 30px; text-align:center;}
             .rule{padding:20px 0; border-top:1px solid #eee;}
@@ -234,7 +240,7 @@ if (function_exists('is_page') && is_page('terms')) {
     </head>
     <body>
         <div class="terms-box">
-            <div class="terms-logo"></div>
+            <img class="terms-logo" src="<?php echo esc_url(nexv_logo_url()); ?>" alt="NEXV">
             <h1>قوانین و مقررات</h1>
             <p class="tagline">شرایط خرید از فروشگاه NEXV — لطفاً پیش از ثبت سفارش بخوانید</p>
             <?php $i = 0; foreach ($rules as $rule) : $i++; ?>
@@ -249,6 +255,7 @@ if (function_exists('is_page') && is_page('terms')) {
             </div>
             <a class="terms-back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
         </div>
+        <?php echo nexv_static_dock_html(); ?>
     </body>
     </html>
     <?php
@@ -269,6 +276,7 @@ if (function_exists('is_page') && is_page('about')) {
         <script>(function(){try{var t=localStorage.getItem('nexv_theme'); if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();</script>
         <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}</style>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php echo function_exists('nexv_favicon_tags') ? nexv_favicon_tags() : ''; ?>
         <title>درباره ما | NEXV</title>
         <meta name="description" content="اطلاعات تماس و آدرس فروشگاه اینترنتی NEXV؛ فروشگاه تخصصی محصولات و قطعات اورجینال اپل.">
         <link rel="canonical" href="<?php echo esc_url(get_permalink()); ?>">
@@ -280,7 +288,7 @@ if (function_exists('is_page') && is_page('about')) {
         <style>
             body{font-family:'Vazirmatn',Tahoma,sans-serif; background:#f7f6fb; margin:0; padding:40px 16px; color:#201f2b;}
             .about-box{max-width:520px; margin:0 auto; background:#fff; border-radius:20px; padding:36px 28px; box-shadow:0 20px 50px rgba(0,0,0,.08); text-align:center;}
-            .about-logo{width:56px; height:56px; border-radius:16px; margin:0 auto 18px; background:linear-gradient(135deg,#6a4dff,#8f6bff);}
+            .about-logo{width:56px; height:56px; border-radius:16px; margin:0 auto 18px; display:block; object-fit:cover; box-shadow:0 10px 24px rgba(20,10,60,.18);}
             .about-box h1{font-size:22px; margin-bottom:6px;}
             .about-box .tagline{color:#7a7788; font-size:13.5px; margin-bottom:26px;}
             .about-row{display:flex; align-items:flex-start; gap:10px; text-align:right; padding:14px 0; border-top:1px solid #eee;}
@@ -304,7 +312,7 @@ if (function_exists('is_page') && is_page('about')) {
     </head>
     <body>
         <div class="about-box">
-            <div class="about-logo"></div>
+            <img class="about-logo" src="<?php echo esc_url(nexv_logo_url()); ?>" alt="NEXV">
             <h1>NEXV</h1>
             <p class="tagline">فروشگاه تخصصی محصولات و قطعات اورجینال اپل</p>
 
@@ -328,6 +336,7 @@ if (function_exists('is_page') && is_page('about')) {
 
             <a class="about-back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
         </div>
+        <?php echo nexv_static_dock_html(); ?>
     </body>
     </html>
     <?php
@@ -336,6 +345,11 @@ if (function_exists('is_page') && is_page('about')) {
 
 
 $html    = file_get_contents(__DIR__ . '/site.html');
+/* آیکونِ تب: «نماد سایت» وردپرس اگه تنظیم شده، وگرنه logo.png قالب */
+$nexv_icon_tags = (function_exists('has_site_icon') && has_site_icon())
+    ? '<link rel="icon" href="' . esc_url(get_site_icon_url(192)) . '"><link rel="apple-touch-icon" href="' . esc_url(get_site_icon_url(180)) . '">'
+    : nexv_favicon_tags();
+$html = preg_replace('#</head>#i', $nexv_icon_tags . '</head>', $html, 1);
 $api_url = esc_url(get_template_directory_uri() . '/api.php');
 $home_url = esc_url_raw(home_url('/'));
 
