@@ -3389,3 +3389,24 @@ add_action('admin_init', function () {
     nexv_flush_rank_math_sitemap();
     update_option('nexv_pages_restore_v1', 1, false);
 }, 50);
+
+/* =========================================================================
+ * «تسویه حساب» همون «سبد خرید»ه و «فروشگاه» همون صفحه‌ی اصلی (به درخواستِ مدیر سایت):
+ * برگه‌هاشون حذف و آدرس‌هاشون ۳۰۱ می‌شن: /checkout/ → /cart/ ، /shop/ → صفحه‌ی اصلی
+ * ========================================================================= */
+add_action('template_redirect', function () {
+    $path = trim((string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
+    $base = trim((string) parse_url(home_url('/'), PHP_URL_PATH), '/');
+    if ($base !== '' && strpos($path, $base) === 0) $path = trim(substr($path, strlen($base)), '/');
+    if ($path === 'checkout') { wp_redirect(home_url('/cart/'), 301); exit; }
+    if ($path === 'shop')     { wp_redirect(home_url('/'), 301); exit; }
+}, 0);
+add_action('admin_init', function () {
+    if (get_option('nexv_pages_merge_v1') || !current_user_can('manage_options')) return;
+    foreach (['checkout', 'shop'] as $slug) {
+        $p = get_page_by_path($slug, OBJECT, 'page');
+        if ($p) wp_delete_post($p->ID, true);
+    }
+    nexv_flush_rank_math_sitemap();
+    update_option('nexv_pages_merge_v1', 1, false);
+}, 60);
