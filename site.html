@@ -5257,14 +5257,20 @@ function fillDealTicker(){
       wrap.appendChild(b);
       btn[side] = b;
     });
+    /* به‌جای عددِ scrollLeft (که با padding و اسنپ چند پیکسل جابه‌جا می‌شه)، جای واقعیِ
+       اولین و آخرین کارت نسبت به لبه‌های ردیف سنجیده می‌شه */
     const update = ()=>{
-      const max = row.scrollWidth - row.clientWidth;
-      const rtl = getComputedStyle(row).direction === 'rtl';
-      const fromLeft = rtl ? max + row.scrollLeft : row.scrollLeft;   /* فاصله از لبه‌ی فیزیکیِ چپ */
-      btn.left.classList.toggle('show', max > 4 && fromLeft > 4);
-      btn.right.classList.toggle('show', max > 4 && fromLeft < max - 4);
+      const kids = row.children;
+      if(!kids.length){ btn.left.classList.remove('show'); btn.right.classList.remove('show'); return; }
+      const box = row.getBoundingClientRect();
+      let minL = Infinity, maxR = -Infinity;
+      for(const k of kids){ const r = k.getBoundingClientRect(); if(r.width){ minL = Math.min(minL, r.left); maxR = Math.max(maxR, r.right); } }
+      const pad = 12;
+      btn.left.classList.toggle('show', minL < box.left - pad);
+      btn.right.classList.toggle('show', maxR > box.right + pad);
     };
     row.addEventListener('scroll', update, { passive:true });
+    row.addEventListener('scrollend', update);
     window.addEventListener('resize', update);
     update(); setTimeout(update, 400); setTimeout(update, 1500);
   }
