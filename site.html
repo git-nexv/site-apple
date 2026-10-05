@@ -279,6 +279,21 @@ section{padding:80px 0;}
 .card-visual{overflow:hidden;}
 .card-visual img{color:transparent; font-size:0;}
 .reco-track::-webkit-scrollbar{display:none; height:0;}
+/* دکمه‌های چپ/راست برای ردیف‌های افقی (فقط دسکتاپ؛ در موبایل با انگشت کشیده می‌شه) */
+.sa-wrap{position:relative;}
+.sa-btn{
+  position:absolute; top:50%; z-index:5; width:38px; height:38px; margin-top:-19px; border-radius:50%; padding:0; cursor:pointer;
+  display:none; place-items:center; color:var(--text);
+  background:var(--glass-solid); border:1px solid var(--glass-edge); box-shadow:var(--glass-hl), 0 8px 22px rgba(20,10,60,.16);
+  -webkit-backdrop-filter:blur(14px) saturate(180%); backdrop-filter:blur(14px) saturate(180%);
+  opacity:0; pointer-events:none; transform:scale(.85); transition:opacity .25s ease, transform .25s ease, background .2s ease, color .2s ease;
+}
+.sa-btn svg{width:17px; height:17px;}
+.sa-left{left:-8px;} .sa-right{right:-8px;}
+.sa-btn.show{opacity:1; pointer-events:auto; transform:none;}
+.sa-btn:hover{color:#fff; background:var(--accent); border-color:transparent;}
+.sa-btn:active{transform:scale(.9);}
+@media (hover:hover) and (pointer:fine){ .sa-btn{display:grid;} }
 
 /* محوشدنِ نرمِ لبه‌ی ردیف‌های افقی (محصولات پیشنهادی و مقالات) به‌جای بریدگیِ ناگهانی.
    هر لبه فقط وقتی محو می‌شه که واقعاً محتوای بیشتری پشتش باشه (با اسکریپت تنظیم می‌شه). */
@@ -5208,6 +5223,49 @@ function fillDealTicker(){
   // ردیف‌ها بعد از رسیدنِ محصولات/مقالات ساخته می‌شن؛ هر تغییری تو صفحه دوباره بررسی می‌شه
   new MutationObserver(()=> requestAnimationFrame(scan)).observe(document.body, { childList:true, subtree:true });
   window.addEventListener('resize', scan);
+})();
+
+/* دکمه‌های فلش چپ/راست روی همه‌ی ردیف‌های اسکرولی؛ هر فلش فقط وقتی دیده می‌شه که اون طرف
+   هنوز محتوا باشه. scrollBy با جهتِ فیزیکی کار می‌کنه، پس در راست‌به‌چپ هم درسته. */
+(function scrollArrows(){
+  const SEL = '.reco-track, .articles-row';
+  const ICON = { left:'<path d="M15 5l-7 7 7 7"/>', right:'<path d="M9 5l7 7-7 7"/>' };
+  function attach(row){
+    if(row.dataset.saInit) return;
+    row.dataset.saInit = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'sa-wrap';
+    row.parentNode.insertBefore(wrap, row);
+    wrap.appendChild(row);
+    const btn = {};
+    ['left','right'].forEach(side=>{
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sa-btn sa-' + side;
+      b.setAttribute('aria-label', side === 'left' ? 'نمایش موارد سمت چپ' : 'نمایش موارد سمت راست');
+      b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${ICON[side]}</svg>`;
+      b.addEventListener('click', ()=>{
+        row.dispatchEvent(new Event('wheel'));   /* اسکرولِ خودکارِ مقالات چند ثانیه متوقف بشه */
+        const amt = Math.max(220, row.clientWidth * 0.8);
+        row.scrollBy({ left: side === 'left' ? -amt : amt, behavior:'smooth' });
+      });
+      wrap.appendChild(b);
+      btn[side] = b;
+    });
+    const update = ()=>{
+      const max = row.scrollWidth - row.clientWidth;
+      const rtl = getComputedStyle(row).direction === 'rtl';
+      const fromLeft = rtl ? max + row.scrollLeft : row.scrollLeft;   /* فاصله از لبه‌ی فیزیکیِ چپ */
+      btn.left.classList.toggle('show', max > 4 && fromLeft > 4);
+      btn.right.classList.toggle('show', max > 4 && fromLeft < max - 4);
+    };
+    row.addEventListener('scroll', update, { passive:true });
+    window.addEventListener('resize', update);
+    update(); setTimeout(update, 400); setTimeout(update, 1500);
+  }
+  const scan = ()=> document.querySelectorAll(SEL).forEach(attach);
+  scan();
+  new MutationObserver(()=> requestAnimationFrame(scan)).observe(document.body, { childList:true, subtree:true });
 })();
 </script>
 </body>
