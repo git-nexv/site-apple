@@ -286,13 +286,15 @@ section{padding:80px 0;}
   display:none; place-items:center; color:var(--text);
   background:var(--glass-solid); border:1px solid var(--glass-edge); box-shadow:var(--glass-hl), 0 8px 22px rgba(20,10,60,.16);
   -webkit-backdrop-filter:blur(14px) saturate(180%); backdrop-filter:blur(14px) saturate(180%);
-  opacity:0; pointer-events:none; transform:scale(.85); transition:opacity .25s ease, transform .25s ease, background .2s ease, color .2s ease;
+  opacity:0; pointer-events:none; transform:scale(.6); filter:blur(4px);
+  transition:opacity .35s ease, transform .5s cubic-bezier(.3,1.5,.5,1), filter .35s ease, background .2s ease, color .2s ease;
 }
 .sa-btn svg{width:17px; height:17px;}
 .sa-left{left:-8px;} .sa-right{right:-8px;}
-.sa-btn.show{opacity:1; pointer-events:auto; transform:none;}
+.sa-left:not(.show){transform:translateX(14px) scale(.6);} .sa-right:not(.show){transform:translateX(-14px) scale(.6);}
+.sa-btn.show{opacity:1; pointer-events:auto; transform:none; filter:none;}
 .sa-btn:hover{color:#fff; background:var(--accent); border-color:transparent;}
-.sa-btn:active{transform:scale(.9);}
+.sa-btn.show:active{transform:scale(.88); transition-duration:.12s;}
 @media (hover:hover) and (pointer:fine){ .sa-btn{display:grid;} }
 
 /* محوشدنِ نرمِ لبه‌ی ردیف‌های افقی (محصولات پیشنهادی و مقالات) به‌جای بریدگیِ ناگهانی.
@@ -5246,7 +5248,10 @@ function fillDealTicker(){
       b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${ICON[side]}</svg>`;
       b.addEventListener('click', ()=>{
         row.dispatchEvent(new Event('wheel'));   /* اسکرولِ خودکارِ مقالات چند ثانیه متوقف بشه */
-        const amt = Math.max(220, row.clientWidth * 0.8);
+        /* هر کلیک دقیقاً یک باکس (عرضِ یک کارت + فاصله‌ی بینشون) */
+        const card = row.firstElementChild;
+        const gap = parseFloat(getComputedStyle(row).columnGap || getComputedStyle(row).gap) || 16;
+        const amt = card ? card.getBoundingClientRect().width + gap : 220;
         row.scrollBy({ left: side === 'left' ? -amt : amt, behavior:'smooth' });
       });
       wrap.appendChild(b);
