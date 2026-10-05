@@ -2424,6 +2424,41 @@ function getSearchHistory(){
   catch(e){ return []; }
 }
 
+/* انتخابِ تصادفی و متنوع برای «پیشنهادهای ویژه»ی صفحه‌ی اصلی: محصولات بر اساسِ نوعِ قطعه
+   (باتری، ال سی دی، مادربرد، دوربین و ...) دسته می‌شن و به نوبت از هر نوع یکی برداشته می‌شه،
+   بدون تکرارِ مدلِ دستگاه؛ هر بار باز شدنِ صفحه ترکیبِ جدیدی میاد. محصولاتِ عکس‌دار اولویت دارن. */
+function diverseRandomPicks(list, n){
+  const shuffle = a => { for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const typeOf = t => {
+    t = normalizeSearchText(t || '');
+    if(t.includes('باتری')) return 'battery';
+    if(t.includes('ال سی دی') || t.includes('السیدی')) return 'lcd';
+    if(t.includes('مادربرد')) return 'board';
+    if(t.includes('دوربین جلو')) return 'fcam';
+    if(t.includes('دوربین')) return 'rcam';
+    if(t.includes('بدنه') || t.includes('شاسی')) return 'body';
+    return 'other';
+  };
+  const modelOf = t => String(t || '').split('|').pop().replace(/battery|lcd|motherboard|front camera|rear camera|camera|body|chassis/ig, '').trim().toLowerCase();
+  const pool = shuffle(list.slice()).sort((a, b) => (b.image ? 1 : 0) - (a.image ? 1 : 0));
+  const buckets = {};
+  pool.forEach(p => { (buckets[typeOf(p.title)] = buckets[typeOf(p.title)] || []).push(p); });
+  const types = shuffle(Object.keys(buckets));
+  const out = [], usedModels = new Set();
+  let guard = 0;
+  while(out.length < n && guard++ < 500){
+    let added = false;
+    for(const t of types){
+      if(out.length >= n) break;
+      const b = buckets[t];
+      const idx = b.findIndex(p => !usedModels.has(modelOf(p.title)));
+      if(idx >= 0){ const p = b.splice(idx, 1)[0]; out.push(p); usedModels.add(modelOf(p.title)); added = true; }
+    }
+    if(!added) usedModels.clear();   /* مدل‌های متفاوت تموم شد؛ از این به بعد تکرارِ مدل مجازه */
+    if(!types.some(t => buckets[t].length)) break;
+  }
+  return out;
+}
 function renderRecommendations(){
   const box = document.getElementById('recoRow');
   if(!box) return;
@@ -2437,8 +2472,7 @@ function renderRecommendations(){
   if(!matches.length){
     /* «پیشنهادهای ویژه برای شما» فقط محصولاتی رو نشون می‌ده که برچسبِ «پرفروش» دارن
        (قبلاً هر محصولی که هر برچسبی داشت، مثلاً «اورجینال»، اینجا میومد). */
-    const best = PRODUCTS.filter(p => productHasTag(p, 'پرفروش'));
-    matches = best.length ? best : PRODUCTS.slice(0, 10);
+    matches = diverseRandomPicks(PRODUCTS, 10);
     term = null;
     heading = 'پیشنهادهای ویژه برای شما';
   }
