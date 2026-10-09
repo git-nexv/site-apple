@@ -2663,7 +2663,7 @@ add_action('admin_init', function () {
        عنوان‌های فایل seed هست). به هیچ محصولِ دیگه‌ای دست زده نمی‌شه. */
     if (!get_option('nexv_seed_recreate_v2')) {
         $titles = [];
-        foreach ($files as $f) {
+        foreach (array_filter($files, function ($f) { return basename($f) === 'products-2026-10.csv'; }) as $f) {
             if (($h = fopen($f, 'r')) === false) continue;
             $hd = fgetcsv($h); $ni = array_search('Name', array_map(function ($x) { return preg_replace('/^\xEF\xBB\xBF/', '', $x); }, (array) $hd));
             while (($rw = fgetcsv($h)) !== false) { if ($ni !== false && isset($rw[$ni])) $titles[] = sanitize_text_field($rw[$ni]); }
@@ -2677,7 +2677,13 @@ add_action('admin_init', function () {
         delete_option('nexv_seed_done_v2');
     }
     $done = (array) get_option('nexv_seed_done_v2', []);
-    $report = ['created' => [], 'skipped' => [], 'nocat' => []];
+    $offsets = (array) get_option('nexv_seed_offsets', []);
+    $report = (array) get_transient('nexv_seed_report') + ['created' => [], 'skipped' => [], 'nocat' => []];
+    /* پردازشِ دسته‌ای: هر بار حداکثر ~۲۰ ثانیه کار انجام می‌شه و جای ادامه ذخیره می‌شه؛
+       با هر بار باز شدنِ پیشخوان (یا رفرشِ خودکار) ادامه پیدا می‌کنه تا تموم بشه. */
+    $started = microtime(true);
+    @set_time_limit(120);
+    wp_defer_term_counting(true);
     foreach ($files as $file) {
         $key = basename($file);
         if (in_array($key, $done, true)) continue;
@@ -2685,7 +2691,11 @@ add_action('admin_init', function () {
         if (!$fh) continue;
         $head = fgetcsv($fh);
         if ($head) $head[0] = preg_replace('/^\xEF\xBB\xBF/', '', $head[0]);
+        $rowNo = 0; $from = (int) ($offsets[$key] ?? 0); $finished = true;
         while (($row = fgetcsv($fh)) !== false) {
+            $rowNo++;
+            if ($rowNo <= $from) continue;
+            if (microtime(true) - $started > 20) { $finished = false; $rowNo--; break; }
             if (!$head || count($row) !== count($head)) continue;
             $r = array_combine($head, $row);
             $name = sanitize_text_field($r['Name'] ?? '');
@@ -2695,13 +2705,25 @@ add_action('admin_init', function () {
                 $name
             ));
             if ($dupe) { $report['skipped'][] = $name . ' (#' . $dupe . ')'; continue; }
-            $id = wp_insert_post(['post_type' => 'nexv_product', 'post_title' => $name, 'post_content' => wp_kses_post($r['Description'] ?? ''), 'post_status' => 'publish']);
+            $postArr = ['post_type' => 'nexv_product', 'post_title' => $name, 'post_content' => wp_kses_post($r['Description'] ?? ''), 'post_status' => 'publish'];
+            if (!empty($r['Slug'])) $postArr['post_name'] = sanitize_title($r['Slug']);
+            $id = wp_insert_post($postArr);
             if (is_wp_error($id) || !$id) continue;
             nexv_save_price_with_date($id, 0);
             update_post_meta($id, '_nexv_short_desc', sanitize_textarea_field($r['Short description'] ?? ''));
             if (!empty($r['Color Options'])) update_post_meta($id, '_nexv_colors', sanitize_text_field($r['Color Options']));
             if (!empty($r['Storage Options'])) update_post_meta($id, '_nexv_storages', sanitize_text_field($r['Storage Options']));
             if (!empty($r['Tags'])) update_post_meta($id, '_nexv_badge', implode('|', array_filter(array_map('trim', preg_split('/\s*[,،|]\s*/u', $r['Tags'])))));
+            if (!empty($r['Variant Groups'])) {
+                $groups = [];
+                foreach (explode(';', $r['Variant Groups']) as $chunk) {
+                    if (strpos($chunk, ':') === false) continue;
+                    [$gl, $go] = array_map('trim', explode(':', $chunk, 2));
+                    $opts = array_values(array_filter(array_map('trim', explode('|', $go))));
+                    if ($gl !== '' && $opts) $groups[] = ['label' => sanitize_text_field($gl), 'options' => array_map('sanitize_text_field', $opts)];
+                }
+                if ($groups) update_post_meta($id, '_nexv_variant_groups', wp_json_encode($groups, JSON_UNESCAPED_UNICODE));
+            }
             update_post_meta($id, '_nexv_color', '#6a4dff');
             update_post_meta($id, '_nexv_icon', 'disc');
             if (!empty($r['Categories'])) {
@@ -2711,19 +2733,37 @@ add_action('admin_init', function () {
             $report['created'][] = $name;
         }
         fclose($fh);
-        $done[] = $key;
-        update_option('nexv_seed_done_v2', $done, false);
+        if ($finished) {
+            $done[] = $key; unset($offsets[$key]);
+            update_option('nexv_seed_done_v2', $done, false);
+        } else {
+            $offsets[$key] = $rowNo;
+            set_transient('nexv_seed_pending', ['file' => $key, 'row' => $rowNo, 'created' => count($report['created'])], HOUR_IN_SECONDS);
+        }
+        update_option('nexv_seed_offsets', $offsets, false);
         delete_transient('nexv_products_cache_v2');
         set_transient('nexv_seed_report', $report, DAY_IN_SECONDS);
+        if (!$finished) break;
+        delete_transient('nexv_seed_pending');
     }
+    wp_defer_term_counting(false);
+});
+/* تا وقتی افزودنِ محصولات تموم نشده، پیشخوان خودش رو چند ثانیه یک‌بار رفرش می‌کنه تا ادامه بده */
+add_action('admin_notices', function () {
+    $p = get_transient('nexv_seed_pending');
+    if (!$p || !current_user_can('manage_options')) return;
+    echo '<div class="notice notice-warning"><p><strong>NEXV — در حال افزودن محصولات جدید...</strong> تا الان ' . (int) $p['created'] . ' محصول ساخته شد. لطفاً این صفحه رو نبندید؛ خودکار ادامه پیدا می‌کنه.</p></div>';
+    echo '<script>setTimeout(function(){ location.reload(); }, 1500);</script>';
 });
 add_action('admin_notices', function () {
     $r = get_transient('nexv_seed_report');
     if (!$r || !current_user_can('manage_options')) return;
+    if (get_transient('nexv_seed_pending')) return;   // تا پایانِ کار فقط پیامِ پیشرفت نشون داده می‌شه
     delete_transient('nexv_seed_report');
     echo '<div class="notice notice-info is-dismissible"><p><strong>NEXV — افزودن محصولات جدید:</strong></p>';
-    echo '<p>ساخته شد (' . count($r['created']) . '): ' . esc_html(implode('، ', $r['created']) ?: '—') . '</p>';
-    if ($r['skipped']) echo '<p>از قبل وجود داشت و ساخته نشد: ' . esc_html(implode('، ', $r['skipped'])) . '</p>';
+    $list = $r['created']; $more = count($list) > 30 ? ' و ' . (count($list) - 30) . ' محصول دیگه' : '';
+    echo '<p>ساخته شد (' . count($r['created']) . '): ' . esc_html(implode('، ', array_slice($list, 0, 30)) ?: '—') . esc_html($more) . '</p>';
+    if ($r['skipped']) echo '<p>از قبل وجود داشت و ساخته نشد (' . count($r['skipped']) . '): ' . esc_html(implode('، ', array_slice($r['skipped'], 0, 20))) . '</p>';
     if ($r['nocat']) echo '<p>دسته‌بندی پیدا نشد برای: ' . esc_html(implode('، ', $r['nocat'])) . '</p>';
     echo '</div>';
 });
@@ -3757,3 +3797,40 @@ function nexv_orders_page_html() {
     </div>
     <?php
 }
+
+/* =========================================================================
+ * افزودنِ یک‌باره‌ی مقاله‌ها از seed/articles-*.json (پیوندِ یکتای انگلیسیِ مشخص)
+ * اگه مقاله‌ای با همین پیوند از قبل باشه، دوباره ساخته نمی‌شه.
+ * ========================================================================= */
+add_action('admin_init', function () {
+    if (!current_user_can('manage_options')) return;
+    $done = (array) get_option('nexv_article_seed_done', []);
+    $made = [];
+    foreach ((array) glob(get_stylesheet_directory() . '/seed/articles-*.json') as $file) {
+        $key = basename($file);
+        if (in_array($key, $done, true)) continue;
+        $list = json_decode((string) file_get_contents($file), true);
+        foreach ((array) $list as $a) {
+            $slug = sanitize_title($a['slug'] ?? '');
+            if ($slug === '' || empty($a['title'])) continue;
+            if (get_page_by_path($slug, OBJECT, 'nexv_article')) continue;
+            $id = wp_insert_post([
+                'post_type' => 'nexv_article', 'post_status' => 'publish', 'post_name' => $slug,
+                'post_title' => sanitize_text_field($a['title']), 'post_excerpt' => sanitize_textarea_field($a['excerpt'] ?? ''),
+                'post_content' => wp_kses_post($a['content'] ?? ''),
+            ]);
+            if ($id && !is_wp_error($id)) $made[] = $a['title'];
+        }
+        $done[] = $key;
+    }
+    if ($made || count($done) !== count((array) get_option('nexv_article_seed_done', []))) {
+        update_option('nexv_article_seed_done', $done, false);
+        if ($made) set_transient('nexv_article_seed_report', $made, DAY_IN_SECONDS);
+    }
+});
+add_action('admin_notices', function () {
+    $m = get_transient('nexv_article_seed_report');
+    if (!$m || !current_user_can('manage_options')) return;
+    delete_transient('nexv_article_seed_report');
+    echo '<div class="notice notice-success is-dismissible"><p><strong>NEXV — ' . count($m) . ' مقاله‌ی جدید اضافه شد:</strong> ' . esc_html(implode('، ', $m)) . '</p></div>';
+});
