@@ -4379,18 +4379,11 @@ function renderAdminOrders(){
     ).join('');
 
     return `<div class="order-wrap" data-order="${o.id}">
-      <div class="order-del-bg" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/></svg>
-        حذف سفارش
-      </div>
       <div class="order-slide" data-order="${o.id}">
       <button type="button" class="admin-order-row" data-order="${o.id}" style="width:100%; display:flex; justify-content:space-between; align-items:center; padding:13px 14px; background:transparent; border:none; text-align:right; cursor:pointer;">
         <span style="font-size:13px; font-weight:700;">#${o.id} — ${escHtml(o.customerName || '')}</span>
         <span style="display:flex; align-items:center; gap:8px;">
           <span class="order-status-badge st-${o.status}">${ORDER_STATUS_LABEL[o.status] || o.status}</span>
-          <span class="order-del-x" role="button" tabindex="0" data-del="${o.id}" aria-label="حذف سفارش">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-          </span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px; transform:rotate(${open?90:0}deg); transition:transform .2s;"><path d="M9 6l6 6-6 6"/></svg>
         </span>
       </button>
@@ -4421,45 +4414,8 @@ function renderAdminOrders(){
     });
   });
 
-  list.querySelectorAll('.order-del-x').forEach(x=>{
-    x.addEventListener('click', e=>{ e.stopPropagation(); confirmDeleteOrder(Number(x.dataset.del)); });
-  });
 
-  /* کشیدنِ ردیف به چپ: نوارِ قرمزِ «حذف سفارش» پشتش پیدا می‌شه و اگه به‌اندازه‌ی کافی
-     کشیده بشه، پیامِ تأیید نشون داده می‌شه. */
-  list.querySelectorAll('.order-slide').forEach(slide=>{
-    let sx = 0, sy = 0, dx = 0, active = false, decided = false;
-    const reset = ()=>{ slide.classList.remove('dragging'); slide.style.transform = ''; dx = 0; };
-    slide.addEventListener('pointerdown', e=>{
-      if(e.pointerType === 'mouse' && e.button !== 0) return;
-      sx = e.clientX; sy = e.clientY; active = true; decided = false; dx = 0;
-    });
-    slide.addEventListener('pointermove', e=>{
-      if(!active) return;
-      const mx = e.clientX - sx, my = e.clientY - sy;
-      if(!decided){
-        if(Math.abs(mx) < 8 && Math.abs(my) < 8) return;
-        decided = true;
-        if(Math.abs(my) > Math.abs(mx)){ active = false; return; }   // اسکرولِ عمودی
-        slide.classList.add('dragging');
-        try{ slide.setPointerCapture(e.pointerId); }catch(_){}
-      }
-      dx = Math.min(0, Math.max(-150, mx));      // فقط به سمت چپ
-      slide.style.transform = `translateX(${dx}px)`;
-      e.preventDefault();
-    });
-    const finish = ()=>{
-      if(!active) return;
-      active = false;
-      if(dx < -80){
-        slide.style.transform = 'translateX(-150px)';
-        slide.classList.remove('dragging');
-        confirmDeleteOrder(Number(slide.dataset.order), reset);
-      }else{ reset(); }
-    };
-    slide.addEventListener('pointerup', finish);
-    slide.addEventListener('pointercancel', ()=>{ active = false; reset(); });
-  });
+  /* حذفِ سفارش غیرفعال شد: سفارش‌ها هیچ‌وقت پاک نمی‌شن (نه با دکمه، نه با کشیدنِ ردیف). */
   list.querySelectorAll('.order-action-btn, .order-stage-btn').forEach(btn=>{
     btn.addEventListener('click', ()=> setOrderStatus(Number(btn.dataset.order), btn.dataset.status));
   });

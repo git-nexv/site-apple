@@ -275,6 +275,43 @@ if (!is_dir($DATA_DIR))     { @mkdir($DATA_DIR, 0775, true); }
 if (!is_dir($BACKUP_DIR))   { @mkdir($BACKUP_DIR, 0775, true); }
 if (!is_dir($RECEIPTS_DIR)) { @mkdir($RECEIPTS_DIR, 0775, true); }
 
+/* =========================================================================
+ * آرشیوِ دائمیِ سفارش‌ها (هیچ‌وقت پاک نمی‌شه)
+ * هر سفارش، جدا از db.json، در یک فایلِ مستقل (order-<id>.json) و یک دفترِ فقط‌افزودنی
+ * (orders-log.jsonl) هم ذخیره می‌شه. اگه db.json به هر دلیلی خراب/خالی بشه، سفارش‌ها
+ * در اولین درخواست از همین آرشیو برمی‌گردن. تاریخِ ثبتِ سفارش هیچ‌وقت عوض نمی‌شه.
+ * ========================================================================= */
+$ARCHIVE_DIR = $DATA_DIR . '/orders-archive';
+if (!is_dir($ARCHIVE_DIR)) { @mkdir($ARCHIVE_DIR, 0775, true); }
+if (!file_exists($ARCHIVE_DIR . '/.htaccess')) {
+    @file_put_contents($ARCHIVE_DIR . '/.htaccess', "Require all denied\n<IfModule !mod_authz_core.c>\n  Order allow,deny\n  Deny from all\n</IfModule>\n");
+}
+function nexv_archive_order($dir, $order, $event = 'save') {
+    if (!$dir || !is_dir($dir) || empty($order['id'])) return;
+    $file = $dir . '/order-' . (int) $order['id'] . '.json';
+    if (file_exists($file)) {
+        $prev = json_decode((string) @file_get_contents($file), true);
+        /* اگه با همین شماره سفارشِ دیگه‌ای (با تاریخِ ثبتِ متفاوت) آرشیو شده، روش نوشته نمی‌شه */
+        if (is_array($prev) && !empty($prev['created_at']) && !empty($order['created_at']) && $prev['created_at'] !== $order['created_at']) {
+            $file = $dir . '/order-' . (int) $order['id'] . '-' . preg_replace('/\D/', '', $order['created_at']) . '.json';
+        } elseif (is_array($prev) && !empty($prev['created_at'])) {
+            $order['created_at'] = $prev['created_at'];   // تاریخِ ثبت همیشه همون اولی می‌مونه
+        }
+    }
+    $json = json_encode($order, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    $tmp = $file . '.tmp';
+    if (@file_put_contents($tmp, $json, LOCK_EX) !== false) { @rename($tmp, $file); }
+    @file_put_contents($dir . '/orders-log.jsonl', json_encode(['event' => $event, 'at' => date('c'), 'order' => $order], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+}
+function nexv_archived_orders($dir) {
+    $out = [];
+    foreach ((array) glob($dir . '/order-*.json') as $f) {
+        $o = json_decode((string) @file_get_contents($f), true);
+        if (is_array($o) && !empty($o['id'])) $out[] = $o;
+    }
+    return $out;
+}
+
 /* جلوگیری از دسترسیِ مستقیمِ وب به دیتابیس و بکاپ‌ها (که شاملِ رمزها و آدرس‌ها هستن).
    فایل‌های رسید عکس (png/jpg) هستن و همچنان برای مدیر قابل نمایش می‌مونن. روی هاست‌های
    Apache/LiteSpeed این .htaccess جلوی باز شدنِ db.json/بکاپ‌ها از مرورگر رو می‌گیره.
@@ -410,6 +447,9 @@ function save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $data) {
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     file_put_contents($LATEST_JSON, $json);
     file_put_contents($BACKUP_DIR . '/backup-' . date('Ymd-His') . '.json', $json);
+    /* یک نسخه‌ی روزانه که هیچ‌وقت پاک نمی‌شه (نسخه‌های بالا فقط ۳۰تای آخر نگه داشته می‌شن) */
+    $daily = $BACKUP_DIR . '/daily-' . date('Ymd') . '.json';
+    file_put_contents($daily, $json);
 
     $files = glob($BACKUP_DIR . '/backup-*.json');
     if ($files && count($files) > $MAX_BACKUPS) {
@@ -483,6 +523,28 @@ if (!isset($db['next_order_id'])) {
     $db_dirty = true;
 }
 if (!isset($db['next_address_id'])) { $db['next_address_id'] = 1; $db_dirty = true; }
+
+/* بازیابیِ خودکار: هر سفارشی که در آرشیو هست ولی در db.json نیست، برگردونده می‌شه */
+$nexv_arch_files = (array) glob($ARCHIVE_DIR . '/order-*.json');
+if (count($nexv_arch_files) > count($db['orders'])) {
+    $have = [];
+    foreach ($db['orders'] as $o) { $have[(int) $o['id'] . '|' . ($o['created_at'] ?? '')] = true; }
+    foreach (nexv_archived_orders($ARCHIVE_DIR) as $ao) {
+        if (!isset($have[(int) $ao['id'] . '|' . ($ao['created_at'] ?? '')])) { $db['orders'][] = $ao; $db_dirty = true; }
+    }
+    usort($db['orders'], function ($a, $b) { return strcmp((string) ($a['created_at'] ?? ''), (string) ($b['created_at'] ?? '')) ?: ((int) $a['id'] <=> (int) $b['id']); });
+}
+$nexv_max_order = 0;
+foreach ($db['orders'] as $o) { $nexv_max_order = max($nexv_max_order, (int) ($o['id'] ?? 0)); }
+foreach ($nexv_arch_files as $f) { if (preg_match('/order-(\d+)/', basename($f), $m)) $nexv_max_order = max($nexv_max_order, (int) $m[1]); }
+if ((int) $db['next_order_id'] <= $nexv_max_order) { $db['next_order_id'] = $nexv_max_order + 1; $db_dirty = true; }
+/* سفارش‌هایی که قبل از اضافه‌شدنِ آرشیو ثبت شدن، یک‌بار آرشیو می‌شن */
+if (count((array) glob($ARCHIVE_DIR . '/order-*.json')) < count($db['orders'])) {
+    foreach ($db['orders'] as $o) {
+        if (!file_exists($ARCHIVE_DIR . '/order-' . (int) $o['id'] . '.json')) nexv_archive_order($ARCHIVE_DIR, $o, 'backfill');
+    }
+}
+unset($nexv_arch_files, $nexv_max_order);
 
 foreach ($db['users'] as &$u) {
     if (!isset($u['addresses']) || !is_array($u['addresses'])) {
@@ -967,9 +1029,12 @@ switch ($action) {
             'status' => 'pending',
             'created_at' => date('c'),
         ];
+        $order['statusHistory'] = [['status' => 'pending', 'at' => $order['created_at']]];
         $db['orders'][] = $order;
         $db['next_order_id']++;
+        nexv_archive_order($ARCHIVE_DIR, $order, 'created');   // اول آرشیوِ دائمی
         save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
+        if (function_exists('nexv_mirror_order_to_wp')) { try { nexv_mirror_order_to_wp($order); } catch (\Throwable $e) {} }   // نسخه‌ی سوم در دیتابیسِ وردپرس
         /* اول جوابِ مشتری فرستاده می‌شه؛ اطلاع‌رسانی به مدیر بعدش و بدون معطل‌کردنِ مشتری */
         echo json_encode(['success' => true, 'order' => $order], JSON_UNESCAPED_UNICODE);
         $nexv_detached = false;
@@ -1184,32 +1249,29 @@ switch ($action) {
         $validStatuses = ['pending', 'confirmed', 'rejected', 'packing', 'courier', 'shipped'];
         if (!in_array($status, $validStatuses, true)) json_fail('وضعیت نامعتبر است.');
 
-        $found = false;
+        $found = null;
         foreach ($db['orders'] as &$o) {
-            if ((int) $o['id'] === $orderId) { $o['status'] = $status; $found = true; break; }
+            if ((int) $o['id'] === $orderId) {
+                $o['status'] = $status;
+                $o['statusHistory'] = array_merge((array) ($o['statusHistory'] ?? []), [['status' => $status, 'at' => date('c')]]);
+                $found = $o;
+                break;
+            }
         }
         unset($o);
         if (!$found) json_fail('سفارش پیدا نشد.', 404);
+        nexv_archive_order($ARCHIVE_DIR, $found, 'status:' . $status);
         save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
-        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+        if (function_exists('nexv_mirror_order_to_wp')) { try { nexv_mirror_order_to_wp($found); } catch (\Throwable $e) {} }
+        echo json_encode(['success' => true, 'order' => $found], JSON_UNESCAPED_UNICODE);
         break;
     }
 
     /* ---------- حذفِ کاملِ یک سفارش (فقط مدیر) ---------- */
+    /* ---------- حذفِ سفارش غیرفعاله: سفارش‌ها هیچ‌وقت پاک نمی‌شن (به درخواستِ مدیر سایت) ---------- */
     case 'delete_order': {
         nexv_require_admin();
-        $orderId = (int) ($input['orderId'] ?? 0);
-        $before = count($db['orders']);
-        $removedReceipt = null;
-        $db['orders'] = array_values(array_filter($db['orders'], function ($o) use ($orderId, &$removedReceipt) {
-            if ((int) $o['id'] === $orderId) { $removedReceipt = $o['receiptUrl'] ?? null; return false; }
-            return true;
-        }));
-        if (count($db['orders']) === $before) json_fail('سفارش پیدا نشد.', 404);
-        // فایلِ رسیدِ همون سفارش هم پاک می‌شه تا روی هاست تلنبار نشه
-        if ($removedReceipt) { @unlink($RECEIPTS_DIR . '/' . basename($removedReceipt)); }
-        save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
-        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+        json_fail('حذف سفارش غیرفعال است؛ سفارش‌ها برای همیشه نگه داشته می‌شوند. برای کنار گذاشتنِ یک سفارش، وضعیتش را «رد شد» کنید.', 403);
         break;
     }
 
