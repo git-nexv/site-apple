@@ -675,6 +675,11 @@ footer{border-top:1px solid var(--border); padding:40px 0 22px;}
 .order-card-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:700; font-size:13.5px;}
 /* حذفِ سفارش: کشیدنِ ردیف به چپ، یا دکمه‌ی ضربدر */
 .order-wrap{position:relative; border:1px solid var(--border); border-radius:14px; overflow:hidden;}
+.admin-push{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:6px 0 10px; padding:12px 14px;
+  border-radius:16px; background:var(--accent-soft); border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);}
+.admin-push .ap-text{display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 220px;}
+.admin-push .ap-text b{font-size:13.5px;} .admin-push .ap-text small{font-size:12px; color:var(--text-dim); line-height:1.7;}
+.admin-push .ap-btns{display:flex; gap:8px;} .admin-push .btn{padding:8px 14px; font-size:12.5px;}
 .order-del-bg{
   position:absolute; inset:0; display:flex; align-items:center; justify-content:flex-start;
   padding-left:20px; background:#e5484d; color:#fff; font-size:13px; font-weight:700; gap:7px;
@@ -2100,6 +2105,13 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
     </div>
 
     <div id="adminOrdersPane">
+      <div class="admin-push" id="adminPush">
+        <div class="ap-text"><b>🔔 اعلانِ سفارشِ جدید</b><small id="adminPushStatus">روی این گوشی، با هر سفارشِ جدید یک اعلان دریافت کنید.</small></div>
+        <div class="ap-btns">
+          <button type="button" class="btn btn-primary" id="adminPushEnable">فعال‌سازی</button>
+          <button type="button" class="btn btn-ghost" id="adminPushTest" style="display:none;">ارسال آزمایشی</button>
+        </div>
+      </div>
       <p class="modal-sub" id="adminSub">سفارش‌های ثبت‌شده و رسیدهای پرداخت</p>
       <div id="adminOrdersList" style="display:flex; flex-direction:column; gap:12px; margin-top:10px;"></div>
     </div>
@@ -4220,6 +4232,7 @@ function openAdmin(){
   adminOverlay.classList.add('open');
   lockBodyScroll();
   adminOpenOrderId = null;
+  refreshPushUI();
   const list = document.getElementById('adminOrdersList');
   list.innerHTML = '<p style="text-align:center; color:var(--text-dim); padding:20px 0;">در حال بارگذاری...</p>';
   fetch(window.NEXV_API_URL + '?action=list_orders&requesterId=' + encodeURIComponent(user.id))
@@ -4242,6 +4255,78 @@ function openAdmin(){
     .catch(()=>{ list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">اتصال به سرور ممکن نشد.</p>'; });
 }
 function closeAdmin(){ adminOverlay.classList.remove('open'); unlockBodyScroll(); }
+
+/* ---------------- اعلانِ سفارشِ جدید روی گوشیِ مدیر (PWA / Web Push) ---------------- */
+const NEXV_SW_URL = new URL('nexv-sw.js', new URL(HOME_URL, location.origin)).href;
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function b64uToBytes(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); s += '='.repeat((4 - s.length % 4) % 4); const b = atob(s); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+function pushStatus(t){ const el = document.getElementById('adminPushStatus'); if(el) el.textContent = t; }
+async function nexvSwRegistration(){
+  if(!('serviceWorker' in navigator)) return null;
+  const reg = await navigator.serviceWorker.register(NEXV_SW_URL, { scope: new URL(HOME_URL, location.origin).pathname });
+  await navigator.serviceWorker.ready;
+  const tok = adminToken();
+  if(tok && reg.active) reg.active.postMessage({ type:'nexv-admin-token', token: tok });
+  return reg;
+}
+async function refreshPushUI(){
+  const en = document.getElementById('adminPushEnable'), te = document.getElementById('adminPushTest');
+  if(!en) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
+    if(isIOS() && !isStandalone()){
+      pushStatus('روی آیفون: از دکمه‌ی اشتراک‌گذاری (Share) سافاری گزینه‌ی «Add to Home Screen» رو بزنید، بعد سایت رو از آیکونِ NEXV روی صفحه‌ی گوشی باز کنید و اینجا «فعال‌سازی» رو بزنید.');
+    }else{ pushStatus('این مرورگر از اعلان پشتیبانی نمی‌کنه؛ از Chrome (اندروید) یا نسخه‌ی نصب‌شده روی صفحه‌ی آیفون استفاده کنید.'); }
+    en.style.display = 'none'; te.style.display = 'none'; return;
+  }
+  try{
+    const reg = await nexvSwRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if(sub && Notification.permission === 'granted'){
+      pushStatus('✅ اعلانِ سفارشِ جدید روی این دستگاه فعاله.'); en.textContent = 'ثبت دوباره'; te.style.display = '';
+    }else if(Notification.permission === 'denied'){
+      pushStatus('اجازه‌ی اعلان برای این سایت بسته شده؛ از تنظیماتِ گوشی/مرورگر، اعلان‌های NEXV رو روشن کنید.'); te.style.display = 'none';
+    }
+  }catch(_){}
+}
+document.getElementById('adminPushEnable')?.addEventListener('click', async ()=>{
+  const btn = document.getElementById('adminPushEnable');
+  try{
+    btn.disabled = true; pushStatus('در حال فعال‌سازی...');
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ pushStatus('اجازه‌ی اعلان داده نشد.'); return; }
+    const reg = await nexvSwRegistration();
+    const kr = await fetch(window.NEXV_API_URL + '?action=push_vapid').then(r => r.json());
+    if(!kr || !kr.success) throw new Error(kr && kr.error || 'کلید اعلان دریافت نشد.');
+    let sub = await reg.pushManager.getSubscription();
+    if(sub){ try{ await sub.unsubscribe(); }catch(_){} }
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(kr.publicKey) });
+    const sr = await fetch(window.NEXV_API_URL + '?action=push_subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subscription: sub.toJSON() }) }).then(r => r.json());
+    if(!sr || !sr.success) throw new Error(sr && sr.error || 'ثبت دستگاه ناموفق بود.');
+    showToast('اعلانِ سفارشِ جدید روی این دستگاه فعال شد 🔔');
+    refreshPushUI();
+  }catch(err){ pushStatus('فعال‌سازی ممکن نشد: ' + (err && err.message ? err.message : err)); }
+  finally{ btn.disabled = false; }
+});
+document.getElementById('adminPushTest')?.addEventListener('click', async ()=>{
+  pushStatus('در حال ارسال اعلان آزمایشی...');
+  try{
+    const r = await fetch(window.NEXV_API_URL + '?action=push_test', { method:'POST' }).then(r => r.json());
+    pushStatus(r && r.success ? '✅ اعلان آزمایشی فرستاده شد؛ چند ثانیه‌ی دیگه روی گوشی میاد.' : ('ارسال نشد: ' + ((r && r.error) || 'خطای ناشناخته')));
+  }catch(_){ pushStatus('اتصال به سرور ممکن نشد.'); }
+});
+/* هر بار که مدیر سایت رو باز می‌کنه، توکنِ به‌روز به سرویس‌ورکر داده می‌شه (برای نمایشِ جزئیاتِ سفارش در اعلان) */
+(function(){
+  const u = currentUser();
+  if(u && u.is_admin && adminToken() && 'serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistration(NEXV_SW_URL).then(reg => { if(reg && reg.active) reg.active.postMessage({ type:'nexv-admin-token', token: adminToken() }); }).catch(()=>{});
+  }
+  /* با زدن روی اعلان، پنلِ سفارش‌ها مستقیم باز می‌شه */
+  if(new URLSearchParams(location.search).get('nexv_admin') === 'orders' && u && u.is_admin){
+    try{ const x = new URL(location.href); x.searchParams.delete('nexv_admin'); history.replaceState(null, '', x.toString()); }catch(_){}
+    setTimeout(()=> openAdmin(), 300);
+  }
+})();
 document.getElementById('adminClose').addEventListener('click', closeAdmin);
 adminOverlay.addEventListener('click', e=>{ if(e.target===adminOverlay) closeAdmin(); });
 

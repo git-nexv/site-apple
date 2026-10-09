@@ -1275,6 +1275,38 @@ switch ($action) {
         break;
     }
 
+    /* ---------- اعلانِ سفارشِ جدید (PWA) — فقط مدیر ---------- */
+    case 'push_vapid': {
+        nexv_require_admin(); nexv_boot_wp();
+        $v = function_exists('nexv_vapid') ? nexv_vapid() : null;
+        if (!$v) json_fail('ساخت کلید اعلان روی این هاست ممکن نشد (OpenSSL).', 500);
+        echo json_encode(['success' => true, 'publicKey' => $v['public'], 'devices' => count(nexv_push_subs())], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    case 'push_subscribe': {
+        nexv_require_admin(); nexv_boot_wp();
+        if (!function_exists('nexv_push_subscribe') || !nexv_push_subscribe((array) ($input['subscription'] ?? []), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''))) json_fail('ثبتِ این دستگاه ممکن نشد.');
+        echo json_encode(['success' => true, 'devices' => count(nexv_push_subs())], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    case 'push_test': {
+        nexv_require_admin(); nexv_boot_wp();
+        update_option('nexv_push_test_until', time() + 90, false);
+        $r = nexv_push_send_all();
+        echo json_encode(['success' => $r['sent'] > 0, 'result' => $r, 'error' => $r['sent'] > 0 ? null : ($r['total'] ? 'ارسال به سرورِ اعلان ناموفق بود: ' . implode(' | ', $r['errors']) : 'هنوز هیچ دستگاهی برای اعلان ثبت نشده.')], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    case 'latest_order_brief': {
+        nexv_require_admin();
+        $isTest = false;
+        if (function_exists('get_option') && (int) get_option('nexv_push_test_until', 0) > time()) { $isTest = true; update_option('nexv_push_test_until', 0, false); }
+        $last = $db['orders'] ? end($db['orders']) : null;
+        $brief = $last ? ['id' => $last['id'], 'customerName' => $last['customerName'] ?? '', 'grandTotal' => $last['grandTotal'] ?? 0,
+            'items' => implode('، ', array_map(function ($it) { return ($it['title'] ?? '') . ' ×' . (int) ($it['qty'] ?? 1); }, array_slice((array) ($last['items'] ?? []), 0, 3)))] : null;
+        echo json_encode(['success' => true, 'test' => $isTest, 'order' => $brief ?: ['id' => 0, 'customerName' => '', 'grandTotal' => 0]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+
     case 'config':
         echo json_encode(['success' => true, 'googleClientId' => GOOGLE_CLIENT_ID], JSON_UNESCAPED_UNICODE);
         break;

@@ -348,6 +348,11 @@ $html    = file_get_contents(__DIR__ . '/site.html');
 $nexv_icon_tags = (function_exists('has_site_icon') && has_site_icon())
     ? '<link rel="icon" href="' . esc_url(get_site_icon_url(192)) . '"><link rel="apple-touch-icon" href="' . esc_url(get_site_icon_url(180)) . '">'
     : nexv_favicon_tags();
+/* PWA: نصب روی صفحه‌ی اصلیِ گوشی (برای اعلانِ سفارشِ جدید روی آیفون لازمه) */
+$nexv_icon_tags .= '<link rel="manifest" href="' . esc_url(home_url('/nexv-manifest.webmanifest')) . '">'
+    . '<meta name="theme-color" content="#6a4dff"><meta name="apple-mobile-web-app-capable" content="yes">'
+    . '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="NEXV">'
+    . '<meta name="apple-mobile-web-app-status-bar-style" content="default">';
 $html = preg_replace('#</head>#i', $nexv_icon_tags . '</head>', $html, 1);
 $api_url = esc_url(get_template_directory_uri() . '/api.php');
 $home_url = esc_url_raw(home_url('/'));
