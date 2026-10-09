@@ -978,6 +978,8 @@ body{background:var(--bg);}
   100%{transform:translate3d(-40vw,10vh,0) scale(.9); opacity:.75;}
 }
 @media (prefers-reduced-motion: reduce){ #nexvBg .blob{animation:none;} }
+/* روی گوشی، حینِ اسکرول حرکتِ خیلی آرومِ پس‌زمینه لحظه‌ای مکث می‌کنه تا اسکرول روان بمونه (ظاهر عوض نمی‌شه) */
+html.nexv-scrolling #nexvBg .blob{animation-play-state:paused;}
 
 /* سطح‌های داخل صفحه: شیشه‌ی شفاف با لبه‌ی نوری (بدون blur برای روان ماندنِ اسکرول در موبایل) */
 .card, .feature, .article-card, .product-detail, .pd-description, .pd-reviews,
@@ -2299,7 +2301,7 @@ function cardHtml(p){
     <div class="card reveal in" style="--card-color:${p.color}" data-url="${p.url ? p.url : ''}">
       <div class="card-glow"></div>
       ${badgesHtml(p)}
-      <div class="card-visual${p.image ? ' has-img' : ''}">${p.image ? `<img src="${p.image}" alt="${p.title}" loading="lazy" decoding="async">` : icon(p.ic)}</div>
+      <div class="card-visual${p.image ? ' has-img' : ''}">${p.image ? `<img src="${p.thumb || p.image}" alt="${p.title}" loading="lazy" decoding="async">` : icon(p.ic)}</div>
       <h3><bdi>${p.title}</bdi></h3>
       ${cardVariantsHtml(p) || `<p class="spec">${p.spec}</p>`}
       <div class="card-foot">
@@ -2928,7 +2930,13 @@ function initArticlesAutoScroll(row){
   ['wheel','touchstart','pointerdown'].forEach(evt=>{
     row.addEventListener(evt, pauseForAWhile, { passive:true });
   });
+  /* فقط وقتی ردیف روی صفحه دیده می‌شه حرکت می‌کنه؛ بیرون از دید هیچ کاری انجام نمی‌شه (روی گوشی سبک‌تر) */
+  let onScreen = true;
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(es => { onScreen = es[0].isIntersecting; if(onScreen && !rafId) rafId = requestAnimationFrame(step); }).observe(row);
+  }
   function step(){
+    if(!onScreen){ rafId = null; return; }
     if(!paused && document.visibilityState === 'visible'){
       /* در چیدمانِ راست‌به‌راست، scrollLeft از ۰ به سمتِ منفی می‌ره؛ پس جهتِ حرکت باید برعکس باشه */
       const rtl = getComputedStyle(row).direction === 'rtl';
@@ -3333,7 +3341,7 @@ function updateCartUI(){
     total += unitPrice * qty;
     const variantLabel = variantLabelParts(color, storage, extraVariants).join(' / ');
     return `<div class="drawer-item" style="--card-color:${p.color}">
-      <div class="drawer-thumb">${p.image ? `<img src="${p.image}" alt="${p.title}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : icon(p.ic)}</div>
+      <div class="drawer-thumb">${p.image ? `<img src="${p.thumb || p.image}" alt="${p.title}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">` : icon(p.ic)}</div>
       <div class="drawer-info">
         <h5>${p.title}</h5>
         ${variantLabel ? `<span style="color:var(--accent);">${variantLabel}</span>` : ''}
@@ -3403,11 +3411,31 @@ themeToggle.addEventListener('click', ()=>{
 function currentUser(){
   try { return JSON.parse(localStorage.getItem('nexv_user') || 'null'); } catch(e){ return null; }
 }
+/* توکنِ مدیر (موقعِ ورودِ مدیر از سرور گرفته می‌شه) همراهِ همه‌ی درخواست‌های API فرستاده می‌شه
+   تا پنلِ سفارش‌ها به سشنِ وردپرس (که بعد از چند روز منقضی می‌شد) وابسته نباشه. */
+function adminToken(){ try{ return localStorage.getItem('nexv_admin_token') || ''; }catch(_){ return ''; } }
+(function(){
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    try{
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const tok = adminToken();
+      if(tok && window.NEXV_API_URL && url.indexOf(window.NEXV_API_URL) === 0){
+        init = Object.assign({}, init || {});
+        const h = new Headers(init.headers || (typeof input !== 'string' && input.headers) || {});
+        h.set('X-NEXV-Admin', tok);
+        init.headers = h;
+      }
+    }catch(_){}
+    return nativeFetch(input, init);
+  };
+})();
 const AVATAR_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
 const ADMIN_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M3 9h18M8 20h8"/></svg>';
 
 function logoutUser(){
   localStorage.removeItem('nexv_user');
+  try{ localStorage.removeItem('nexv_admin_token'); }catch(_){}
   renderAuthHeader();
   showToast('از حساب کاربری خارج شدید.');
   fetch(window.NEXV_API_URL + '?action=logout', { method: 'POST' }).catch(()=>{});
@@ -3632,6 +3660,7 @@ authForm.addEventListener('submit', e=>{
     authSubmit.classList.remove('loading');
     if(ok && data.success){
       if(data.user) localStorage.setItem('nexv_user', JSON.stringify(data.user));
+      try{ if(data.adminToken) localStorage.setItem('nexv_admin_token', data.adminToken); else localStorage.removeItem('nexv_admin_token'); }catch(_){}
       closeAuth();
       renderAuthHeader();
       showToast(authMode==='signup' ? 'ثبت‌نام با موفقیت انجام شد 🎉' : 'خوش آمدید!');
@@ -4113,12 +4142,31 @@ document.getElementById('receiptPickBtn').addEventListener('click', ()=> receipt
 receiptInput.addEventListener('change', ()=>{
   const file = receiptInput.files && receiptInput.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    receiptDataUrl = reader.result;
-    document.getElementById('receiptPreview').src = receiptDataUrl;
+  /* عکسِ گوشی معمولاً چند مگابایته و آپلودش روی اینترنتِ موبایل خیلی طول می‌کشید؛ قبل از
+     ارسال، حداکثر ۱۶۰۰ پیکسل و JPEG فشرده می‌شه (حدود ۲۰۰ تا ۴۰۰ کیلوبایت، کاملاً خوانا). */
+  paymentSubmit.disabled = true;
+  const showReceipt = url => {
+    receiptDataUrl = url;
+    document.getElementById('receiptPreview').src = url;
     document.getElementById('receiptPreviewWrap').style.display = 'block';
     paymentSubmit.disabled = false;
+  };
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const original = reader.result;
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const MAX = 1600, scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+        const out = c.toDataURL('image/jpeg', 0.82);
+        showReceipt(out.length < original.length ? out : original);
+      }catch(_){ showReceipt(original); }
+    };
+    img.onerror = ()=> showReceipt(original);
+    img.src = original;
   };
   reader.readAsDataURL(file);
 });
@@ -4130,14 +4178,19 @@ paymentSubmit.addEventListener('click', ()=>{
   if(!items.length){ showToast('سبد خرید شما خالی است.'); return; }
   const itemsTotal = items.reduce((s,it)=>s + it.price*it.qty, 0);
 
+  if(paymentSubmit.classList.contains('loading')) return;   /* جلوگیری از ثبتِ دوباره با چند بار زدن */
   paymentSubmit.classList.add('loading');
+  const ctrl = window.AbortController ? new AbortController() : null;
+  const killer = ctrl ? setTimeout(()=> ctrl.abort(), 90000) : null;
   fetch(window.NEXV_API_URL + '?action=create_order', {
     method: 'POST',
+    signal: ctrl ? ctrl.signal : undefined,
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ userId: user.id, addressId: selectedShipAddress.id, items, itemsTotal, shippingMethod: selectedShippingMethod, shippingFee: currentShippingFee(), receiptImage: receiptDataUrl })
   })
   .then(r => r.json().then(data => ({ok: r.ok, data})))
   .then(({ok, data})=>{
+    if(killer) clearTimeout(killer);
     paymentSubmit.classList.remove('loading');
     if(ok && data.success){
       cart = {};
@@ -4150,8 +4203,9 @@ paymentSubmit.addEventListener('click', ()=>{
     }
   })
   .catch(()=>{
+    if(killer) clearTimeout(killer);
     paymentSubmit.classList.remove('loading');
-    showToast('اتصال به سرور ممکن نشد. دوباره تلاش کنید.');
+    showToast('اتصال به سرور ممکن نشد. اینترنت رو چک کنید و دوباره تلاش کنید.');
   });
 });
 
@@ -4171,7 +4225,17 @@ function openAdmin(){
   fetch(window.NEXV_API_URL + '?action=list_orders&requesterId=' + encodeURIComponent(user.id))
     .then(r => r.json())
     .then(data => {
-      if(!data || !data.success){ list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">دسترسی به سفارش‌ها ممکن نشد.</p>'; return; }
+      if(!data || !data.success){
+        list.innerHTML = `<div style="text-align:center; color:var(--text-dim); padding:10px 0;">
+          <p style="margin:0 0 14px;">نشستِ مدیریت منقضی شده؛ برای دیدنِ سفارش‌ها یک بار دوباره وارد شوید.</p>
+          <button type="button" class="btn btn-primary" id="adminRelogin">ورود دوباره</button></div>`;
+        document.getElementById('adminRelogin')?.addEventListener('click', ()=>{
+          const phone = (currentUser() || {}).phone || '';
+          closeAdmin(); logoutUser(); openAuth('login');
+          setTimeout(()=>{ const f = document.getElementById('phoneInput'); if(f && phone){ f.value = phone; } }, 50);
+        });
+        return;
+      }
       adminOrdersCache = data.orders || [];
       renderAdminOrders();
     })
@@ -4405,7 +4469,7 @@ function renderAdminOrders(){
     btn.addEventListener('click', ()=>{
       const user = currentUser();
       if(!user) return;
-      const url = window.NEXV_API_URL + '?action=invoice&order_id=' + encodeURIComponent(btn.dataset.order) + '&requesterId=' + encodeURIComponent(user.id);
+      const url = window.NEXV_API_URL + '?action=invoice&order_id=' + encodeURIComponent(btn.dataset.order) + '&requesterId=' + encodeURIComponent(user.id) + (adminToken() ? '&t=' + encodeURIComponent(adminToken()) : '');
       window.open(url, '_blank');
     });
   });
@@ -5257,12 +5321,22 @@ function fillDealTicker(){
   function scan(){ document.querySelectorAll('.reco-track').forEach(bind); }
   scan();
   // ردیف‌ها بعد از رسیدنِ محصولات/مقالات ساخته می‌شن؛ هر تغییری تو صفحه دوباره بررسی می‌شه
-  new MutationObserver(()=> requestAnimationFrame(scan)).observe(document.body, { childList:true, subtree:true });
+  let scanQueued = false;
+  new MutationObserver(()=>{ if(scanQueued) return; scanQueued = true; requestAnimationFrame(()=>{ scanQueued = false; scan(); }); }).observe(document.body, { childList:true, subtree:true });
   window.addEventListener('resize', scan);
 })();
 
 /* دکمه‌های فلش چپ/راست روی همه‌ی ردیف‌های اسکرولی؛ هر فلش فقط وقتی دیده می‌شه که اون طرف
    هنوز محتوا باشه. scrollBy با جهتِ فیزیکی کار می‌کنه، پس در راست‌به‌چپ هم درسته. */
+(function pauseBgWhileScrolling(){
+  if(!window.matchMedia || !matchMedia('(pointer:coarse)').matches) return;
+  const root = document.documentElement; let t = null;
+  window.addEventListener('scroll', ()=>{
+    if(!t) root.classList.add('nexv-scrolling');
+    clearTimeout(t);
+    t = setTimeout(()=>{ root.classList.remove('nexv-scrolling'); t = null; }, 180);
+  }, { passive:true });
+})();
 (function scrollArrows(){
   const SEL = '.reco-track, .articles-row';
   const ICON = { left:'<path d="M15 5l-7 7 7 7"/>', right:'<path d="M9 5l7 7-7 7"/>' };
@@ -5310,7 +5384,8 @@ function fillDealTicker(){
   }
   const scan = ()=> document.querySelectorAll(SEL).forEach(attach);
   scan();
-  new MutationObserver(()=> requestAnimationFrame(scan)).observe(document.body, { childList:true, subtree:true });
+  let scanQueued = false;
+  new MutationObserver(()=>{ if(scanQueued) return; scanQueued = true; requestAnimationFrame(()=>{ scanQueued = false; scan(); }); }).observe(document.body, { childList:true, subtree:true });
 })();
 </script>
 </body>

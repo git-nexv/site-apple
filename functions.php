@@ -3410,3 +3410,144 @@ add_action('admin_init', function () {
     nexv_flush_rank_math_sitemap();
     update_option('nexv_pages_merge_v1', 1, false);
 }, 60);
+
+/* عکسِ کارتِ محصول در اندازه‌ی medium_large (برای لیست‌ها؛ صفحه‌ی محصول همون عکسِ بزرگ رو داره) */
+function nexv_card_thumb_url($post_id) {
+    $raw = trim((string) get_post_meta($post_id, '_nexv_gallery', true));
+    if ($raw !== '') {
+        $first = rawurldecode(trim(explode(',', $raw)[0]));
+        if (ctype_digit($first)) return wp_get_attachment_image_url((int) $first, 'medium_large') ?: '';
+        return '';
+    }
+    $tid = get_post_thumbnail_id($post_id);
+    return $tid ? (wp_get_attachment_image_url($tid, 'medium_large') ?: '') : '';
+}
+
+/* =========================================================================
+ * سفارش‌ها در پیشخوانِ وردپرس (NEXV ← سفارش‌ها) + اطلاع‌رسانیِ سفارشِ جدید
+ * این صفحه مستقیم از همون فایلِ سفارش‌های سایت می‌خونه؛ یعنی حتی اگه پنلِ داخلِ
+ * سایت به هر دلیلی باز نشه، مدیر همیشه سفارش‌ها رو اینجا می‌بینه.
+ * ========================================================================= */
+function nexv_orders_db_path() {
+    $u = wp_upload_dir();
+    $cands = [];
+    if (!empty($u['basedir'])) $cands[] = $u['basedir'] . '/nexv-data/db.json';
+    $cands[] = WP_CONTENT_DIR . '/uploads/nexv-data/db.json';
+    $cands[] = get_template_directory() . '/data/db.json';
+    foreach ($cands as $c) { if (file_exists($c)) return $c; }
+    return $cands[0];
+}
+function nexv_orders_read() {
+    $f = nexv_orders_db_path();
+    $d = file_exists($f) ? json_decode((string) file_get_contents($f), true) : null;
+    return is_array($d) ? $d : null;
+}
+function nexv_order_status_labels() {
+    return ['pending' => 'در انتظار بررسی', 'confirmed' => 'تأیید شد', 'rejected' => 'رد شد', 'packing' => 'در حال بسته‌بندی', 'courier' => 'تحویل به پیک/پست', 'shipped' => 'ارسال شد'];
+}
+
+/* اطلاع‌رسانیِ سفارشِ جدید: ایمیل به مدیر + شمارنده‌ی «سفارشِ جدید» روی منوی NEXV */
+function nexv_notify_new_order($order, $detached = true) {
+    update_option('nexv_unseen_orders', (int) get_option('nexv_unseen_orders', 0) + 1, false);
+    $to = get_option('admin_email');
+    /* ایمیل فقط وقتی فرستاده می‌شه که جوابِ مشتری از قبل کامل فرستاده شده باشه (معطلش نکنه) */
+    if (!$detached || !$to || strpos($to, '@nexv.local') !== false) return;
+    $lines = [];
+    foreach ((array) ($order['items'] ?? []) as $it) $lines[] = '- ' . ($it['title'] ?? '') . ' × ' . (int) ($it['qty'] ?? 1) . ' — ' . number_format((int) ($it['price'] ?? 0)) . ' تومان';
+    $body = "سفارش جدید #" . $order['id'] . "\n\nمشتری: " . ($order['customerName'] ?? '') . "\nتلفن: " . ($order['phone'] ?? '')
+          . "\n\n" . implode("\n", $lines) . "\n\nجمع کل: " . number_format((int) ($order['grandTotal'] ?? 0)) . " تومان\n\nرسید: " . ($order['receiptUrl'] ?? '')
+          . "\n\nمشاهده در پیشخوان: " . admin_url('admin.php?page=nexv-orders');
+    @wp_mail($to, 'NEXV — سفارش جدید #' . $order['id'], $body);
+}
+
+add_action('admin_menu', function () {
+    $n = (int) get_option('nexv_unseen_orders', 0);
+    $badge = $n > 0 ? ' <span class="awaiting-mod">' . $n . '</span>' : '';
+    add_submenu_page('nexv-dashboard', 'سفارش‌ها', 'سفارش‌ها' . $badge, 'manage_options', 'nexv-orders', 'nexv_orders_page_html', 1);
+}, 11);
+
+add_action('admin_post_nexv_order_status', function () {
+    if (!current_user_can('manage_options')) wp_die('دسترسی غیرمجاز.');
+    check_admin_referer('nexv_order_status');
+    $id = (int) ($_POST['order_id'] ?? 0);
+    $st = sanitize_key($_POST['status'] ?? '');
+    if (!isset(nexv_order_status_labels()[$st])) wp_die('وضعیت نامعتبر.');
+    $f = nexv_orders_db_path();
+    $fp = fopen($f, 'c+');
+    if ($fp && flock($fp, LOCK_EX)) {
+        $d = json_decode(stream_get_contents($fp), true);
+        if (is_array($d)) {
+            foreach ($d['orders'] as &$o) { if ((int) $o['id'] === $id) { $o['status'] = $st; break; } }
+            unset($o);
+            $json = json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            ftruncate($fp, 0); rewind($fp); fwrite($fp, $json); fflush($fp);
+            @file_put_contents(dirname($f) . '/backups/latest.json', $json);
+        }
+        flock($fp, LOCK_UN);
+    }
+    if ($fp) fclose($fp);
+    wp_redirect(admin_url('admin.php?page=nexv-orders&updated=' . $id . '#order-' . $id));
+    exit;
+});
+
+function nexv_orders_page_html() {
+    update_option('nexv_unseen_orders', 0, false);
+    $d = nexv_orders_read();
+    $orders = $d ? array_reverse((array) ($d['orders'] ?? [])) : [];
+    $labels = nexv_order_status_labels();
+    $api = get_template_directory_uri() . '/api.php';
+    ?>
+    <div class="wrap">
+        <h1>سفارش‌ها <span style="font-size:14px;color:#666">(<?php echo count($orders); ?> سفارش)</span></h1>
+        <?php if (isset($_GET['updated'])): ?><div class="notice notice-success is-dismissible"><p>وضعیت سفارش #<?php echo (int) $_GET['updated']; ?> ذخیره شد.</p></div><?php endif; ?>
+        <?php if (!$d): ?><div class="notice notice-error"><p>فایل سفارش‌ها پیدا نشد: <code><?php echo esc_html(nexv_orders_db_path()); ?></code></p></div><?php endif; ?>
+        <style>
+            .nx-orders{display:grid;gap:14px;margin-top:14px}
+            .nx-order{background:#fff;border:1px solid #dcdcde;border-radius:10px;padding:14px 16px;display:grid;grid-template-columns:1fr 150px;gap:16px}
+            .nx-order h2{margin:0 0 6px;font-size:16px}
+            .nx-order .meta{color:#50575e;font-size:13px;line-height:1.9}
+            .nx-order table{border-collapse:collapse;margin:8px 0;font-size:13px}
+            .nx-order td{padding:3px 8px;border-bottom:1px solid #f0f0f1}
+            .nx-order .rc img{width:150px;height:150px;object-fit:cover;border-radius:8px;border:1px solid #ddd}
+            .nx-st{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;background:#f0f0f1}
+            .nx-st.pending{background:#fff4d6;color:#8a5a00}.nx-st.confirmed,.nx-st.shipped{background:#d9f7e6;color:#0a6b3a}.nx-st.rejected{background:#fde2e2;color:#a00}
+            @media(max-width:782px){.nx-order{grid-template-columns:1fr}}
+        </style>
+        <div class="nx-orders">
+        <?php foreach ($orders as $o):
+            $a = (array) ($o['address'] ?? []);
+            $ts = strtotime((string) ($o['created_at'] ?? ''));
+            $date = $ts ? (function_exists('nexv_jalali_pretty') ? nexv_jalali_pretty($ts) : date_i18n('Y/m/d', $ts)) . ' — ' . wp_date('H:i', $ts) : '';
+            $st = (string) ($o['status'] ?? 'pending');
+        ?>
+            <div class="nx-order" id="order-<?php echo (int) $o['id']; ?>">
+                <div>
+                    <h2>سفارش #<?php echo (int) $o['id']; ?> <span class="nx-st <?php echo esc_attr($st); ?>"><?php echo esc_html($labels[$st] ?? $st); ?></span></h2>
+                    <div class="meta">
+                        <b><?php echo esc_html($o['customerName'] ?? ''); ?></b> — <a href="tel:<?php echo esc_attr($o['phone'] ?? ''); ?>" style="direction:ltr;display:inline-block"><?php echo esc_html($o['phone'] ?? ''); ?></a> — <?php echo esc_html($date); ?><br>
+                        <?php echo esc_html(implode('، ', array_filter([$a['province'] ?? '', $a['city'] ?? '', $a['district'] ?? '', !empty($a['plaque']) ? 'پلاک ' . $a['plaque'] : '', !empty($a['unit']) ? 'واحد ' . $a['unit'] : '']))); ?>
+                        <?php if (!empty($a['postalCode'])) echo ' — کدپستی ' . esc_html($a['postalCode']); ?><br><?php echo esc_html($a['fullAddress'] ?? ''); ?>
+                    </div>
+                    <table>
+                        <?php foreach ((array) ($o['items'] ?? []) as $it): ?>
+                            <tr><td><?php echo esc_html($it['title'] ?? ''); ?></td><td>× <?php echo (int) ($it['qty'] ?? 1); ?></td><td><?php echo esc_html(number_format((int) ($it['price'] ?? 0))); ?> تومان</td></tr>
+                        <?php endforeach; ?>
+                        <tr><td>ارسال (<?php echo esc_html($o['shippingMethod'] ?? ''); ?>)</td><td></td><td><?php echo esc_html(number_format((int) ($o['shippingFee'] ?? 0))); ?> تومان</td></tr>
+                        <tr><td><b>جمع کل</b></td><td></td><td><b><?php echo esc_html(number_format((int) ($o['grandTotal'] ?? 0))); ?> تومان</b></td></tr>
+                    </table>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <input type="hidden" name="action" value="nexv_order_status"><input type="hidden" name="order_id" value="<?php echo (int) $o['id']; ?>">
+                        <?php wp_nonce_field('nexv_order_status'); ?>
+                        <select name="status"><?php foreach ($labels as $k => $l): ?><option value="<?php echo esc_attr($k); ?>" <?php selected($st, $k); ?>><?php echo esc_html($l); ?></option><?php endforeach; ?></select>
+                        <button class="button button-primary">ذخیره وضعیت</button>
+                        <a class="button" target="_blank" href="<?php echo esc_url($api . '?action=invoice&order_id=' . (int) $o['id']); ?>">فاکتور</a>
+                    </form>
+                </div>
+                <div class="rc"><?php if (!empty($o['receiptUrl'])): ?><a href="<?php echo esc_url($o['receiptUrl']); ?>" target="_blank"><img src="<?php echo esc_url($o['receiptUrl']); ?>" alt="رسید"></a><?php endif; ?></div>
+            </div>
+        <?php endforeach; ?>
+        <?php if ($d && !$orders): ?><p>هنوز سفارشی ثبت نشده.</p><?php endif; ?>
+        </div>
+    </div>
+    <?php
+}

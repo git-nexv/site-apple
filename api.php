@@ -11,6 +11,11 @@
  */
 
 header('Content-Type: application/json; charset=utf-8');
+/* فشرده‌سازیِ پاسخ‌ها (لیست محصولات چند صد کیلوبایته؛ با gzip چند برابر کوچیک‌تر و سریع‌تر روی موبایل) */
+if (!ini_get('zlib.output_compression') && extension_loaded('zlib') && stripos((string) ($_SERVER['HTTP_ACCEPT_ENCODING'] ?? ''), 'gzip') !== false
+    && in_array($_GET['action'] ?? '', ['products', 'categories', 'articles', 'list_orders', 'list_customers', 'list_my_orders'], true)) {
+    ob_start('ob_gzhandler');
+}
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -129,6 +134,8 @@ function nexv_wp_products() {
             'url'   => get_permalink($p->ID),
             'image' => $gallery[0] ?? ($img ?: null),
             'images' => $gallery,
+            /* نسخه‌ی کوچیک‌ترِ همون عکس برای کارت‌ها (۷۶۸px به‌جای ۱۰۲۴px)؛ روی گوشی سریع‌تر لود می‌شه */
+            'thumb' => function_exists('nexv_card_thumb_url') ? (nexv_card_thumb_url($p->ID) ?: ($gallery[0] ?? ($img ?: null))) : null,
             'shortDesc' => (string) get_post_meta($p->ID, '_nexv_short_desc', true),
             'colors' => array_values(array_filter(array_map('trim', explode(',', (string) get_post_meta($p->ID, '_nexv_colors', true))))),
             'storages' => array_values(array_filter(array_map('trim', explode(',', (string) get_post_meta($p->ID, '_nexv_storages', true))))),
@@ -413,6 +420,7 @@ function save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $data) {
 }
 
 function public_user($u) {
+    unset($u['admin_tokens']);
     unset($u['password_hash']);
     unset($u['password_plain']);
     return $u;
@@ -423,10 +431,44 @@ function public_user($u) {
    بررسی فقط با requesterId ای بود که از سمت مرورگر فرستاده می‌شد و هرکسی می‌تونست
    جعلش کنه؛ حالا سمتِ سرور و غیرقابل‌جعله. */
 function nexv_require_admin() {
+    if (nexv_admin_token_valid()) return;
     nexv_boot_wp();
     if (!(function_exists('current_user_can') && current_user_can('manage_options'))) {
-        json_fail('دسترسی غیرمجاز.', 403);
+        json_fail('دسترسی غیرمجاز. لطفاً یک بار از حساب خارج و دوباره وارد شوید.', 403);
     }
+}
+
+/* ---------------------------------------------------------------------------
+   توکنِ مدیر: قبلاً دسترسیِ مدیر فقط به سشنِ وردپرس وابسته بود که بعد از ۱۴ روز
+   منقضی می‌شد؛ مدیر هنوز در سایت «وارد» دیده می‌شد ولی سفارش‌ها نمیومدن. حالا
+   هنگامِ ورودِ مدیر یک توکنِ تصادفیِ ۹۰ روزه ساخته می‌شه (فقط هش‌اش ذخیره می‌شه)
+   و مرورگرِ مدیر اون رو همراهِ درخواست‌های مدیریتی می‌فرسته؛ غیرقابل‌جعله.
+--------------------------------------------------------------------------- */
+function nexv_issue_admin_token(&$db, $userId) {
+    $token = bin2hex(random_bytes(24));
+    foreach ($db['users'] as &$u) {
+        if ((int) $u['id'] !== (int) $userId) continue;
+        $list = array_values(array_filter((array) ($u['admin_tokens'] ?? []), function ($t) { return ($t['exp'] ?? 0) > time(); }));
+        $list[] = ['h' => hash('sha256', $token), 'exp' => time() + 90 * DAY_SECONDS_NEXV];
+        $u['admin_tokens'] = array_slice($list, -10);
+        break;
+    }
+    unset($u);
+    return $token;
+}
+define('DAY_SECONDS_NEXV', 86400);
+function nexv_admin_token_valid() {
+    global $db;
+    $token = (string) ($_SERVER['HTTP_X_NEXV_ADMIN'] ?? $_GET['t'] ?? '');
+    if ($token === '' || !is_array($db) || empty($db['users'])) return false;
+    $h = hash('sha256', $token);
+    foreach ($db['users'] as $u) {
+        if (empty($u['is_admin'])) continue;
+        foreach ((array) ($u['admin_tokens'] ?? []) as $t) {
+            if (($t['exp'] ?? 0) > time() && hash_equals((string) ($t['h'] ?? ''), $h)) return true;
+        }
+    }
+    return false;
 }
 
 $db = read_db($DB_FILE, $LATEST_JSON);
@@ -633,11 +675,14 @@ switch ($action) {
         }
 
         // فقط برای مدیر لازمه سشنِ وردپرس ساخته بشه؛ کاربرِ عادی اصلاً وردپرس رو لود نمی‌کنه
+        $adminToken = null;
         if (!empty($found['is_admin'])) {
+            $adminToken = nexv_issue_admin_token($db, $found['id']);
+            save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
             nexv_boot_wp();
             if (function_exists('nexv_bridge_wp_session')) { nexv_bridge_wp_session($found['phone']); }
         }
-        echo json_encode(['success' => true, 'user' => public_user($found)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => true, 'user' => public_user($found), 'adminToken' => $adminToken], JSON_UNESCAPED_UNICODE);
         break;
     }
 
@@ -876,14 +921,15 @@ switch ($action) {
            نه از مقداری که مرورگر فرستاده؛ این‌طوری کسی نمی‌تونه با دستکاریِ درخواست،
            محصول رو ارزون‌تر ثبت کنه. کلیدِ سبد ممکنه شاملِ متغیر (رنگ/حجم) باشه، پس
            شناسه‌ی پایه‌ی محصول از قبل از «::» جدا می‌شه. */
+        /* فقط همون محصولاتِ داخلِ سبد خونده می‌شن (قبلاً کلِ کاتالوگِ ۵۰۰+ محصولی ساخته
+           می‌شد و ثبت سفارش رو چند ثانیه کند می‌کرد). */
         $priceMap = [];
         $variantPriceMap = [];
-        $wpProductsForOrder = function_exists('nexv_wp_products') ? nexv_wp_products() : [];
-        if (is_array($wpProductsForOrder)) {
-            foreach ($wpProductsForOrder as $wpp) {
-                $priceMap[(string) $wpp['id']] = (int) $wpp['price'];
-                $variantPriceMap[(string) $wpp['id']] = is_array($wpp['variantPrices'] ?? null) ? $wpp['variantPrices'] : [];
-            }
+        foreach ($items as $it) {
+            $bid = (int) explode('::', (string) ($it['id'] ?? ''))[0];
+            if (!$bid || isset($priceMap[(string) $bid]) || !function_exists('get_post_type') || get_post_type($bid) !== 'nexv_product') continue;
+            $priceMap[(string) $bid] = (int) get_post_meta($bid, '_nexv_price', true);
+            $variantPriceMap[(string) $bid] = function_exists('nexv_variant_prices') ? nexv_variant_prices($bid) : [];
         }
         $cleanItems = [];
         $computedTotal = 0;
@@ -924,7 +970,12 @@ switch ($action) {
         $db['orders'][] = $order;
         $db['next_order_id']++;
         save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
+        /* اول جوابِ مشتری فرستاده می‌شه؛ اطلاع‌رسانی به مدیر بعدش و بدون معطل‌کردنِ مشتری */
         echo json_encode(['success' => true, 'order' => $order], JSON_UNESCAPED_UNICODE);
+        $nexv_detached = false;
+        if (function_exists('fastcgi_finish_request')) { @fastcgi_finish_request(); $nexv_detached = true; }
+        elseif (function_exists('litespeed_finish_request')) { @litespeed_finish_request(); $nexv_detached = true; }
+        if (function_exists('nexv_notify_new_order')) { @nexv_notify_new_order($order, $nexv_detached); }
         break;
     }
 
@@ -951,7 +1002,7 @@ switch ($action) {
        ادمین از پیشخوان روش کلیک می‌کنه، توی تب جدید باز می‌شه، و از همون‌جا Ctrl+P یا
        دکمه‌ی چاپِ خودِ صفحه رو می‌زنه (خروجی چاپگر یا PDF، برای چسبوندن روی کارتن). */
     case 'invoice': {
-        if (!(function_exists('current_user_can') && current_user_can('manage_options'))) { http_response_code(403); header('Content-Type: text/plain; charset=utf-8'); echo 'دسترسی غیرمجاز.'; break; }
+        if (!nexv_admin_token_valid() && !(function_exists('current_user_can') && current_user_can('manage_options'))) { http_response_code(403); header('Content-Type: text/plain; charset=utf-8'); echo 'دسترسی غیرمجاز.'; break; }
 
         $orderId = (int) ($_GET['order_id'] ?? 0);
         $order = null;
