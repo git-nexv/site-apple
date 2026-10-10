@@ -10,6 +10,13 @@
  *   دوباره‌ی قالب پاک نشه.
  */
 
+/* سرویس‌ورکرِ اعلان‌ها: از همین فایل (که همیشه مستقیم به PHP می‌رسه) سرو می‌شه؛ فایلِ
+   .js در ریشه‌ی سایت روی بعضی هاست‌ها/CDNها اصلاً به وردپرس نمی‌رسید و ثبت نمی‌شد */
+if (($_GET['action'] ?? '') === 'sw' && file_exists(__DIR__ . '/push-lib.php')) {
+    require_once __DIR__ . '/push-lib.php';
+    nexv_pl_serve_sw();
+}
+
 header('Content-Type: application/json; charset=utf-8');
 /* فشرده‌سازیِ پاسخ‌ها (لیست محصولات چند صد کیلوبایته؛ با gzip چند برابر کوچیک‌تر و سریع‌تر روی موبایل) */
 if (!ini_get('zlib.output_compression') && extension_loaded('zlib') && stripos((string) ($_SERVER['HTTP_ACCEPT_ENCODING'] ?? ''), 'gzip') !== false
@@ -60,6 +67,7 @@ function nexv_password_needs_rehash($hash) {
 $NEXV_LIGHT_ACTIONS = [
     'register', 'login', 'logout', 'config', 'google_login',
     'update_profile', 'add_address', 'update_address', 'delete_address', 'list_my_orders',
+    'push_subscribe', 'push_unsubscribe', 'push_pull',
 ];
 $nexv_action_early = $_GET['action'] ?? '';
 if ($nexv_action_early === '' || !in_array($nexv_action_early, $NEXV_LIGHT_ACTIONS, true)) {
@@ -272,6 +280,7 @@ $LATEST_JSON  = $BACKUP_DIR . '/latest.json';
 $MAX_BACKUPS  = 30;
 
 if (!is_dir($DATA_DIR))     { @mkdir($DATA_DIR, 0775, true); }
+if (file_exists(__DIR__ . '/push-lib.php')) require_once __DIR__ . '/push-lib.php';
 if (!is_dir($BACKUP_DIR))   { @mkdir($BACKUP_DIR, 0775, true); }
 if (!is_dir($RECEIPTS_DIR)) { @mkdir($RECEIPTS_DIR, 0775, true); }
 
@@ -1275,35 +1284,84 @@ switch ($action) {
         break;
     }
 
-    /* ---------- اعلانِ سفارشِ جدید (PWA) — فقط مدیر ---------- */
+    /* ---------- اعلان‌ها (Web Push) ---------- */
+    /* کلیدِ عمومیِ اعلان (عمومیه و برای ثبتِ هر دستگاه لازمه) */
     case 'push_vapid': {
-        nexv_require_admin(); nexv_boot_wp();
+        nexv_boot_wp();
         $v = function_exists('nexv_vapid') ? nexv_vapid() : null;
         if (!$v) json_fail('ساخت کلید اعلان روی این هاست ممکن نشد (OpenSSL).', 500);
-        echo json_encode(['success' => true, 'publicKey' => $v['public'], 'devices' => count(nexv_push_subs())], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => true, 'publicKey' => $v['public']], JSON_UNESCAPED_UNICODE);
         break;
     }
+    /* ثبتِ یک دستگاه؛ اگه درخواست با توکنِ معتبرِ مدیر بیاد، دستگاه «مدیر» ثبت می‌شه و اعلانِ سفارشِ جدید هم می‌گیره */
     case 'push_subscribe': {
+        $isAdmin = nexv_admin_token_valid();
+        if (!empty($input['old']) && is_string($input['old'])) nexv_pl_unsubscribe($DATA_DIR, $input['old']);
+        $uid = isset($input['userId']) && is_numeric($input['userId']) ? (int) $input['userId'] : null;
+        $s = nexv_pl_subscribe($DATA_DIR, (array) ($input['subscription'] ?? []), $isAdmin, (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $uid);
+        if (!$s) json_fail('ثبتِ این دستگاه ممکن نشد.');
+        echo json_encode(['success' => true, 'role' => $s['r']], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    case 'push_unsubscribe': {
+        nexv_pl_unsubscribe($DATA_DIR, (string) ($input['endpoint'] ?? ''));
+        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* سرویس‌ورکر وقتی اعلان بدونِ محتوا رسیده، آخرین پیامِ همون دستگاه رو از اینجا می‌گیره */
+    case 'push_pull': {
+        $m = nexv_pl_pull($DATA_DIR, (string) ($input['endpoint'] ?? ''));
+        echo json_encode(['success' => true, 'message' => $m], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* آمارِ دستگاه‌ها برای صفحه‌ی «اعلان‌ها»ی مدیر */
+    case 'push_stats': {
+        nexv_require_admin();
+        $st = nexv_pl_read($DATA_DIR);
+        $c = nexv_pl_counts($DATA_DIR);
+        echo json_encode(['success' => true, 'counts' => $c, 'last' => $st['last'] ?? null], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* ارسالِ یک اعلان برای همه‌ی دستگاه‌هایی که اجازه‌ی اعلان دادن (فقط مدیر) */
+    case 'push_broadcast': {
         nexv_require_admin(); nexv_boot_wp();
-        if (!function_exists('nexv_push_subscribe') || !nexv_push_subscribe((array) ($input['subscription'] ?? []), (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''))) json_fail('ثبتِ این دستگاه ممکن نشد.');
-        echo json_encode(['success' => true, 'devices' => count(nexv_push_subs())], JSON_UNESCAPED_UNICODE);
+        $title = trim((string) ($input['title'] ?? ''));
+        $body  = trim((string) ($input['body'] ?? ''));
+        $url   = trim((string) ($input['url'] ?? ''));
+        if ($body === '') json_fail('متنِ اعلان رو بنویسید.');
+        if ($url !== '' && !preg_match('#^(https?://|/)#i', $url)) $url = '';
+        $v = function_exists('nexv_vapid') ? nexv_vapid() : null;
+        if (!$v) json_fail('کلیدِ اعلان روی این هاست ساخته نشد (OpenSSL).', 500);
+        @set_time_limit(300); @ignore_user_abort(true);
+        $r = nexv_pl_send($DATA_DIR, $v, 'all', ['title' => $title !== '' ? $title : 'NEXV', 'body' => $body, 'url' => $url, 'tag' => 'nexv-news-' . time()], function_exists('nexv_push_subject') ? nexv_push_subject() : 'mailto:admin@nexv.ir');
+        if (!$r['total']) json_fail('هنوز هیچ دستگاهی اجازه‌ی اعلان نداده.');
+        echo json_encode(['success' => $r['sent'] > 0, 'result' => $r, 'error' => $r['sent'] > 0 ? null : 'ارسال ناموفق بود: ' . implode(' | ', $r['errors'])], JSON_UNESCAPED_UNICODE);
         break;
     }
     case 'push_test': {
         nexv_require_admin(); nexv_boot_wp();
-        update_option('nexv_push_test_until', time() + 90, false);
-        $r = nexv_push_send_all();
-        echo json_encode(['success' => $r['sent'] > 0, 'result' => $r, 'error' => $r['sent'] > 0 ? null : ($r['total'] ? 'ارسال به سرورِ اعلان ناموفق بود: ' . implode(' | ', $r['errors']) : 'هنوز هیچ دستگاهی برای اعلان ثبت نشده.')], JSON_UNESCAPED_UNICODE);
+        $v = function_exists('nexv_vapid') ? nexv_vapid() : null;
+        if (!$v) json_fail('کلیدِ اعلان روی این هاست ساخته نشد (OpenSSL).', 500);
+        $home = function_exists('home_url') ? home_url('/?nexv_admin=orders') : '';
+        $r = nexv_pl_send($DATA_DIR, $v, 'admins', ['title' => '🔔 اعلان آزمایشی NEXV', 'body' => 'اعلان‌های سفارشِ جدید روی این دستگاه فعاله ✅', 'url' => $home, 'tag' => 'nexv-test'], function_exists('nexv_push_subject') ? nexv_push_subject() : 'mailto:admin@nexv.ir');
+        echo json_encode(['success' => $r['sent'] > 0, 'result' => $r, 'error' => $r['sent'] > 0 ? null : ($r['total'] ? 'ارسال به سرورِ اعلان ناموفق بود: ' . implode(' | ', $r['errors']) : 'هنوز هیچ دستگاهی برای مدیر ثبت نشده.')], JSON_UNESCAPED_UNICODE);
         break;
     }
+    /* سازگاری با نسخه‌ی قبلیِ سرویس‌ورکر */
     case 'latest_order_brief': {
         nexv_require_admin();
-        $isTest = false;
-        if (function_exists('get_option') && (int) get_option('nexv_push_test_until', 0) > time()) { $isTest = true; update_option('nexv_push_test_until', 0, false); }
         $last = $db['orders'] ? end($db['orders']) : null;
         $brief = $last ? ['id' => $last['id'], 'customerName' => $last['customerName'] ?? '', 'grandTotal' => $last['grandTotal'] ?? 0,
             'items' => implode('، ', array_map(function ($it) { return ($it['title'] ?? '') . ' ×' . (int) ($it['qty'] ?? 1); }, array_slice((array) ($last['items'] ?? []), 0, 3)))] : null;
-        echo json_encode(['success' => true, 'test' => $isTest, 'order' => $brief ?: ['id' => 0, 'customerName' => '', 'grandTotal' => 0]], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => true, 'test' => false, 'order' => $brief ?: ['id' => 0, 'customerName' => '', 'grandTotal' => 0]], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* manifestِ نصبِ سایت روی صفحه‌ی گوشی (برای اعلان روی آیفون لازمه) */
+    case 'manifest': {
+        nexv_boot_wp();
+        header('Content-Type: application/manifest+json; charset=utf-8', true);
+        header('Cache-Control: public, max-age=3600');
+        echo json_encode(function_exists('nexv_manifest_data') ? nexv_manifest_data() : ['name' => 'NEXV', 'short_name' => 'NEXV', 'start_url' => '/', 'display' => 'standalone'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         break;
     }
 

@@ -680,6 +680,34 @@ footer{border-top:1px solid var(--border); padding:40px 0 22px;}
 .admin-push .ap-text{display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 220px;}
 .admin-push .ap-text b{font-size:13.5px;} .admin-push .ap-text small{font-size:12px; color:var(--text-dim); line-height:1.7;}
 .admin-push .ap-btns{display:flex; gap:8px;} .admin-push .btn{padding:8px 14px; font-size:12.5px;}
+/* اعلان‌ها (حساب کاربری ← اعلان‌ها، فقط مدیر) */
+.notify-stats{display:flex; flex-direction:column; gap:4px; padding:12px 14px; margin-bottom:12px; border-radius:16px; border:1px solid var(--border); font-size:13px; color:var(--text-dim); min-height:20px;}
+.notify-stats .ns-row{display:flex; align-items:baseline; gap:8px; color:var(--text); font-weight:700;}
+.notify-stats .ns-num{font-size:22px; color:var(--accent);}
+.notify-stats small{font-size:12px; line-height:1.8;}
+.notify-preview{display:flex; align-items:center; gap:10px; padding:10px 12px; margin:2px 0 14px; border-radius:18px; background:var(--bg-elev-2); border:1px solid var(--border);}
+.notify-preview .np-ic{width:38px; height:38px; border-radius:10px; overflow:hidden; flex-shrink:0; background:var(--accent-soft);}
+.notify-preview .np-ic img{width:100%; height:100%; object-fit:cover; display:block;}
+.notify-preview .np-text{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.notify-preview .np-text b{font-size:13px;} .notify-preview .np-text small{font-size:12px; color:var(--text-dim); line-height:1.7; white-space:pre-line; overflow-wrap:anywhere;}
+.notify-result{display:block; text-align:center; font-size:12.5px; color:var(--text-dim); margin:8px 0 12px; min-height:18px;}
+#notifyForm .admin-push{margin-top:4px;}
+/* بنرِ درخواستِ اجازه‌ی اعلان (برای همه‌ی بازدیدکننده‌ها) */
+.push-ask{
+  position:fixed; z-index:95; left:50%; bottom:calc(92px + env(safe-area-inset-bottom));
+  width:min(440px, calc(100vw - 24px)); transform:translate(-50%, 24px); opacity:0; visibility:hidden;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px; border-radius:22px;
+  background:var(--glass-solid); border:1px solid var(--glass-edge); box-shadow:var(--glass-hl), var(--glass-shadow);
+  -webkit-backdrop-filter:blur(30px) saturate(190%); backdrop-filter:blur(30px) saturate(190%);
+  transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .3s ease, visibility 0s linear .3s;
+}
+.push-ask.show{transform:translate(-50%, 0); opacity:1; visibility:visible; transition:transform .5s cubic-bezier(.34,1.56,.64,1), opacity .3s ease, visibility 0s;}
+.push-ask .pa-ic{width:42px; height:42px; border-radius:13px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,var(--accent),var(--accent-2));}
+.push-ask .pa-ic svg{width:21px; height:21px; stroke:#fff;}
+.push-ask .pa-text{flex:1 1 200px; min-width:0; display:flex; flex-direction:column; gap:3px;}
+.push-ask .pa-text b{font-size:14px;} .push-ask .pa-text small{font-size:12px; color:var(--text-dim); line-height:1.8;}
+.push-ask .pa-btns{display:flex; gap:8px; margin-inline-start:auto;}
+.push-ask .btn{padding:8px 16px; font-size:13px;}
 .order-del-bg{
   position:absolute; inset:0; display:flex; align-items:center; justify-content:flex-start;
   padding-left:20px; background:#e5484d; color:#fff; font-size:13px; font-weight:700; gap:7px;
@@ -2050,6 +2078,31 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
       <button type="button" class="account-back" data-back="menu">→ بازگشت</button>
       <div id="myOrdersList" style="display:flex; flex-direction:column; gap:12px;"></div>
     </div>
+
+    <!-- اعلان‌ها (فقط مدیر): ارسالِ اعلان برای همه‌ی مشتری‌هایی که اجازه دادن -->
+    <form id="notifyForm" class="account-subform" style="display:none;" autocomplete="off">
+      <button type="button" class="account-back" data-back="menu">→ بازگشت</button>
+      <div class="notify-stats" id="notifyStats"></div>
+      <div class="field"><label>عنوانِ اعلان</label><input type="text" id="notifyTitle" maxlength="60" placeholder="مثلاً: تخفیفِ ویژه‌ی آخر هفته"></div>
+      <div class="field"><label>متنِ اعلان</label><textarea id="notifyBody" maxlength="300" required placeholder="متنی که روی گوشیِ مشتری‌ها نمایش داده می‌شه..."></textarea></div>
+      <div class="field"><label>لینک (اختیاری — با زدن روی اعلان باز می‌شه)</label><input type="text" id="notifyUrl" dir="ltr" inputmode="url" placeholder="https://nexv.ir/..."></div>
+      <div class="notify-preview" aria-hidden="true">
+        <span class="np-ic"><img src="" alt="" id="notifyPrevIcon"></span>
+        <span class="np-text"><b id="notifyPrevTitle">NEXV</b><small id="notifyPrevBody">متنِ اعلان اینجا نمایش داده می‌شه.</small></span>
+      </div>
+      <button type="submit" class="submit-btn btn btn-primary" id="notifySend">
+        <span class="spinner"></span>
+        <span class="btn-text">ارسال برای همه</span>
+      </button>
+      <small class="notify-result" id="notifyResult"></small>
+      <div class="admin-push" id="notifyDevice">
+        <div class="ap-text"><b>🔔 همین دستگاه</b><small id="notifyDevStatus">اعلانِ سفارشِ جدید روی این گوشی</small></div>
+        <div class="ap-btns">
+          <button type="button" class="btn btn-primary" id="notifyDevEnable">فعال‌سازی</button>
+          <button type="button" class="btn btn-ghost" id="notifyDevTest" style="display:none;">ارسال آزمایشی</button>
+        </div>
+      </div>
+    </form>
 
     <button type="button" class="account-logout" id="accountLogoutBtn">خروج از حساب کاربری</button>
   </div>
@@ -3778,7 +3831,7 @@ document.getElementById('phoneInput').addEventListener('input', function(){
 const PERSONAL_FIELD_MAP = { accFirstName: 'firstName', accLastName: 'lastName', accPhone: 'phone', accEmail: 'email' };
 const ADDRESS_FIELD_MAP  = { accLabel: 'label', accProvince: 'province', accCity: 'city', accDistrict: 'district', accPlaque: 'plaque', accUnit: 'unit', accPostalCode: 'postalCode', accFullAddress: 'fullAddress' };
 
-const ALL_ACCOUNT_PANES = { menu: accountMenu, personal: personalForm, addressList: addressListPane, addressForm: addressForm, orders: ordersPane };
+const ALL_ACCOUNT_PANES = { menu: accountMenu, personal: personalForm, addressList: addressListPane, addressForm: addressForm, orders: ordersPane, notify: document.getElementById('notifyForm') };
 function showAccountPane(pane){
   Object.entries(ALL_ACCOUNT_PANES).forEach(([key, el])=>{
     const show = key === pane;
@@ -3787,6 +3840,7 @@ function showAccountPane(pane){
   });
   if(pane === 'addressList') renderAddressList();
   if(pane === 'orders') loadMyOrders();
+  if(pane === 'notify') loadNotifyStats();
 }
 
 function fillPersonalForm(user){
@@ -4256,72 +4310,278 @@ function openAdmin(){
 }
 function closeAdmin(){ adminOverlay.classList.remove('open'); unlockBodyScroll(); }
 
-/* ---------------- اعلانِ سفارشِ جدید روی گوشیِ مدیر (PWA / Web Push) ---------------- */
-const NEXV_SW_URL = new URL('nexv-sw.js', new URL(HOME_URL, location.origin)).href;
+/* ---------------- اعلان‌ها (PWA / Web Push): مشتری‌ها + سفارشِ جدید برای مدیر ---------------- */
+const NEXV_SW_SCOPE = new URL(HOME_URL, location.origin).pathname;
+/* سرویس‌ورکر اول از api.php (همیشه به PHP می‌رسه)، اگه نشد از ریشه‌ی سایت؛ هر دو با origin همین صفحه */
+const NEXV_SW_URLS = (function(){
+  const api = new URL(new URL(window.NEXV_API_URL || 'api.php', location.href).pathname, location.origin);
+  const root = new URL(NEXV_SW_SCOPE, location.origin);
+  root.searchParams.set('nexv_sw', '2'); root.searchParams.set('api', api.href); root.searchParams.set('icon', new URL('logo.png', api).href);
+  return [api.href + '?action=sw', root.href];
+})();
 const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function b64uToBytes(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); s += '='.repeat((4 - s.length % 4) % 4); const b = atob(s); return Uint8Array.from(b, c => c.charCodeAt(0)); }
-function pushStatus(t){ const el = document.getElementById('adminPushStatus'); if(el) el.textContent = t; }
-async function nexvSwRegistration(){
-  if(!('serviceWorker' in navigator)) return null;
-  const reg = await navigator.serviceWorker.register(NEXV_SW_URL, { scope: new URL(HOME_URL, location.origin).pathname });
-  await navigator.serviceWorker.ready;
-  const tok = adminToken();
-  if(tok && reg.active) reg.active.postMessage({ type:'nexv-admin-token', token: tok });
-  return reg;
+function nexvPushSupported(){ return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && window.isSecureContext !== false; }
+/* آیفون/آیپد داخلِ سافاری (نه نسخه‌ی نصب‌شده): اعلان فقط بعد از «Add to Home Screen» ممکنه (iOS 16.4+) */
+function nexvIOSNeedsInstall(){
+  if(!isIOS() || isStandalone() || nexvPushSupported()) return false;
+  const ua = navigator.userAgent;
+  if(!/Safari\//.test(ua) || /CriOS|FxiOS|EdgiOS|OPiOS|Instagram|FBAN|FBAV|Telegram|Line\//.test(ua)) return false;
+  const v = ua.match(/OS (\d+)_(\d+)/) || ua.match(/Version\/(\d+)\.(\d+)/);
+  return !v || (+v[1] > 16 || (+v[1] === 16 && +v[2] >= 4));
 }
-async function refreshPushUI(){
-  const en = document.getElementById('adminPushEnable'), te = document.getElementById('adminPushTest');
-  if(!en) return;
-  if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)){
-    if(isIOS() && !isStandalone()){
-      pushStatus('روی آیفون: از دکمه‌ی اشتراک‌گذاری (Share) سافاری گزینه‌ی «Add to Home Screen» رو بزنید، بعد سایت رو از آیکونِ NEXV روی صفحه‌ی گوشی باز کنید و اینجا «فعال‌سازی» رو بزنید.');
-    }else{ pushStatus('این مرورگر از اعلان پشتیبانی نمی‌کنه؛ از Chrome (اندروید) یا نسخه‌ی نصب‌شده روی صفحه‌ی آیفون استفاده کنید.'); }
-    en.style.display = 'none'; te.style.display = 'none'; return;
+function nexvLS(k, v){ try{ if(v === undefined) return localStorage.getItem(k); if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(_){ return null; } }
+function nexvSwActive(reg){
+  return new Promise((resolve, reject)=>{
+    if(reg.active) return resolve(reg);
+    const w = reg.installing || reg.waiting;
+    if(!w) return reject(new Error('سرویس‌ورکر فعال نشد.'));
+    const t = setTimeout(()=> reg.active ? resolve(reg) : reject(new Error('سرویس‌ورکر فعال نشد.')), 15000);
+    w.addEventListener('statechange', ()=>{
+      if(w.state === 'activated' || reg.active){ clearTimeout(t); resolve(reg); }
+      else if(w.state === 'redundant'){ clearTimeout(t); reject(new Error('سرویس‌ورکر نصب نشد.')); }
+    });
+  });
+}
+let nexvSwPromise = null;
+function nexvSwRegistration(){
+  if(!('serviceWorker' in navigator)) return Promise.resolve(null);
+  if(nexvSwPromise) return nexvSwPromise;
+  nexvSwPromise = (async ()=>{
+    /* ۰: api.php با دامنه‌ی کلِ سایت — ۱: ریشه‌ی سایت — ۲: api.php با دامنه‌ی پیش‌فرض */
+    const pref = +(nexvLS('nexv_sw_i') || 0);
+    const order = [pref].concat([0, 1, 2].filter(i => i !== pref));
+    let lastErr = null;
+    for(const i of order){
+      try{
+        const opts = i === 2 ? { updateViaCache:'none' } : { scope: NEXV_SW_SCOPE, updateViaCache:'none' };
+        const reg = await navigator.serviceWorker.register(NEXV_SW_URLS[i === 1 ? 1 : 0], opts);
+        await nexvSwActive(reg);
+        nexvLS('nexv_sw_i', String(i));
+        return reg;
+      }catch(e){ lastErr = e; }
+    }
+    throw lastErr || new Error('سرویس‌ورکر ثبت نشد.');
+  })();
+  nexvSwPromise.catch(()=>{ nexvSwPromise = null; });
+  return nexvSwPromise;
+}
+async function nexvPushKey(){
+  if(window.NEXV_PUSH_KEY) return window.NEXV_PUSH_KEY;
+  const kr = await fetch(window.NEXV_API_URL + '?action=push_vapid').then(r => r.json());
+  if(!kr || !kr.success) throw new Error((kr && kr.error) || 'کلید اعلان دریافت نشد.');
+  return (window.NEXV_PUSH_KEY = kr.publicKey);
+}
+function nexvAskPermission(){
+  return new Promise(res => {
+    try{ const p = Notification.requestPermission(res); if(p && p.then) p.then(res, () => res(Notification.permission)); }
+    catch(_){ res(Notification.permission); }
+  });
+}
+function nexvSameKey(sub, key){
+  try{
+    const a = sub.options && sub.options.applicationServerKey; if(!a) return true;
+    const x = new Uint8Array(a), y = b64uToBytes(key);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  }catch(_){ return true; }
+}
+async function nexvPushRegister(sub){
+  const u = currentUser();
+  const d = await fetch(window.NEXV_API_URL + '?action=push_subscribe', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ subscription: sub.toJSON(), userId: u ? u.id : null }) }).then(r => r.json());
+  if(!d || !d.success) throw new Error((d && d.error) || 'ثبت دستگاه ناموفق بود.');
+  nexvLS('nexv_push_sync', JSON.stringify({ ep: sub.endpoint, role: d.role, at: Date.now() }));
+  return d;
+}
+/* اجازه گرفتن + ثبتِ دستگاه. باید مستقیم از کلیکِ کاربر صدا زده بشه (آیفون بدونِ لمسِ کاربر اجازه نمی‌پرسه) */
+async function nexvPushEnable(){
+  if(!nexvPushSupported()) throw new Error('این مرورگر از اعلان پشتیبانی نمی‌کنه.');
+  const perm = Notification.permission === 'granted' ? 'granted' : await nexvAskPermission();
+  if(perm !== 'granted') throw new Error(perm === 'denied' ? 'اجازه‌ی اعلان بسته شده؛ از تنظیماتِ گوشی/مرورگر، اعلان‌های NEXV رو روشن کنید.' : 'اجازه‌ی اعلان داده نشد.');
+  const reg = await nexvSwRegistration();
+  const key = await nexvPushKey();
+  let sub = await reg.pushManager.getSubscription();
+  if(sub && !nexvSameKey(sub, key)){ try{ await sub.unsubscribe(); }catch(_){} sub = null; }
+  if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(key) });
+  return nexvPushRegister(sub);
+}
+/* هر بار که سایت باز می‌شه (فقط برای کسایی که قبلاً اجازه دادن)، اشتراک بی‌صدا به‌روز نگه داشته می‌شه */
+async function nexvPushSilentSync(){
+  if(!nexvPushSupported() || Notification.permission !== 'granted') return;
+  const reg = await nexvSwRegistration();
+  const key = await nexvPushKey();
+  let sub = await reg.pushManager.getSubscription();
+  if(sub && !nexvSameKey(sub, key)){ try{ await sub.unsubscribe(); }catch(_){} sub = null; }
+  if(!sub){ try{ sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(key) }); }catch(_){ return; } }
+  let s = null; try{ s = JSON.parse(nexvLS('nexv_push_sync') || 'null'); }catch(_){}
+  const u = currentUser(), wantAdmin = !!(u && u.is_admin && adminToken());
+  if(!s || s.ep !== sub.endpoint || Date.now() - (s.at || 0) > 3 * 86400000 || (wantAdmin && s.role !== 'admin')) await nexvPushRegister(sub);
+}
+function nexvPushRole(){ try{ const s = JSON.parse(nexvLS('nexv_push_sync') || 'null'); return s && s.role; }catch(_){ return null; } }
+
+/* ---- بنرِ «اعلان‌ها رو روشن کنید» برای همه‌ی بازدیدکننده‌ها ---- */
+const NEXV_BELL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+const NEXV_SHARE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;vertical-align:-3px;"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+function nexvPushBanner(mode){
+  if(document.getElementById('nexvPushAsk')) return;
+  const u = currentUser(), admin = !!(u && u.is_admin);
+  const el = document.createElement('div');
+  el.id = 'nexvPushAsk'; el.className = 'push-ask'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'اعلان‌های NEXV');
+  el.innerHTML = mode === 'ios'
+    ? `<span class="pa-ic">${NEXV_BELL_SVG}</span>
+       <div class="pa-text"><b>اعلان‌های NEXV روی آیفون</b>
+         <small>در سافاری دکمه‌ی اشتراک‌گذاری ${NEXV_SHARE_SVG} رو بزنید، «Add to Home Screen» رو انتخاب کنید و NEXV رو از آیکونش باز کنید؛ همون‌جا اجازه‌ی اعلان پرسیده می‌شه.</small></div>
+       <div class="pa-btns"><button type="button" class="btn btn-primary" data-pa="later">متوجه شدم</button></div>`
+    : `<span class="pa-ic">${NEXV_BELL_SVG}</span>
+       <div class="pa-text"><b>${admin ? 'اعلانِ سفارش‌های جدید' : 'اعلان‌های NEXV رو روشن کنید'}</b>
+         <small>${admin ? 'با هر سفارشِ جدید، روی همین دستگاه یک اعلان دریافت کنید.' : 'از تخفیف‌ها، محصولاتِ جدید و خبرهای NEXV زودتر از همه باخبر بشید.'}</small></div>
+       <div class="pa-btns"><button type="button" class="btn btn-ghost" data-pa="later">بعداً</button><button type="button" class="btn btn-primary" data-pa="yes">فعال‌سازی</button></div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=> requestAnimationFrame(()=> el.classList.add('show')));
+  const close = ()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 450); };
+  el.querySelector('[data-pa="later"]').addEventListener('click', ()=>{
+    nexvLS('nexv_push_snooze', String(Date.now() + (mode === 'ios' ? 10 : 3) * 86400000)); close();
+  });
+  el.querySelector('[data-pa="yes"]')?.addEventListener('click', async (e)=>{
+    const btn = e.currentTarget; btn.disabled = true;
+    try{
+      const r = await nexvPushEnable();
+      close();
+      showToast(r.role === 'admin' ? 'اعلانِ سفارش‌های جدید روی این دستگاه فعال شد 🔔' : 'اعلان‌های NEXV فعال شد 🔔');
+      refreshPushUI();
+    }catch(err){
+      btn.disabled = false;
+      if(Notification.permission === 'denied'){ close(); }
+      else nexvLS('nexv_push_snooze', String(Date.now() + 86400000));
+      const msg = (err && err.message) || '';
+      showToast(/[\u0600-\u06FF]/.test(msg) ? msg : ('فعال‌سازیِ اعلان ممکن نشد' + (msg ? ': ' + msg : '.')));
+      if(Notification.permission !== 'default') close();
+    }
+  });
+}
+function nexvPushMaybeAsk(tries){
+  tries = tries || 0;
+  if(Date.now() < +(nexvLS('nexv_push_snooze') || 0)) return;
+  const mode = nexvPushSupported() ? (Notification.permission === 'default' ? 'ask' : '') : (nexvIOSNeedsInstall() ? 'ios' : '');
+  if(!mode) return;
+  /* وقتی یک پنجره/سبد/فیلتر بازه، صبر می‌کنه تا بسته بشه */
+  if(document.querySelector('.overlay.open, .drawer.open, .drawer-overlay.open, .filter-screen.open')){
+    if(tries < 20) setTimeout(()=> nexvPushMaybeAsk(tries + 1), 3000);
+    return;
   }
+  nexvPushBanner(mode);
+}
+(function(){
+  const start = ()=>{
+    setTimeout(()=> nexvPushMaybeAsk(0), 3500);
+    const idle = window.requestIdleCallback || (f => setTimeout(f, 1500));
+    idle(()=>{ nexvPushSilentSync().catch(()=>{}); });
+  };
+  if(document.readyState === 'complete') start(); else window.addEventListener('load', start, { once:true });
+})();
+
+/* ---- باکسِ اعلانِ سفارشِ جدید داخلِ پیشخوانِ مدیر ---- */
+function pushStatus(t){ const el = document.getElementById('adminPushStatus'); if(el) el.textContent = t; }
+async function refreshPushUI(){
+  const boxes = [
+    { en: document.getElementById('adminPushEnable'), te: document.getElementById('adminPushTest'), st: document.getElementById('adminPushStatus') },
+    { en: document.getElementById('notifyDevEnable'), te: document.getElementById('notifyDevTest'), st: document.getElementById('notifyDevStatus') },
+  ].filter(b => b.en);
+  const set = (t, enShow, enText, teShow) => boxes.forEach(b => {
+    if(b.st) b.st.textContent = t;
+    b.en.style.display = enShow ? '' : 'none'; if(enText) b.en.textContent = enText;
+    if(b.te) b.te.style.display = teShow ? '' : 'none';
+  });
+  if(!nexvPushSupported()){
+    if(isIOS() && !isStandalone()) set('روی آیفون: از دکمه‌ی اشتراک‌گذاری (Share) سافاری گزینه‌ی «Add to Home Screen» رو بزنید، بعد سایت رو از آیکونِ NEXV روی صفحه‌ی گوشی باز کنید و اینجا «فعال‌سازی» رو بزنید.', false, '', false);
+    else set('این مرورگر از اعلان پشتیبانی نمی‌کنه؛ از Chrome (اندروید) یا نسخه‌ی نصب‌شده روی صفحه‌ی آیفون استفاده کنید.', false, '', false);
+    return;
+  }
+  if(Notification.permission === 'denied'){ set('اجازه‌ی اعلان برای این سایت بسته شده؛ از تنظیماتِ گوشی/مرورگر، اعلان‌های NEXV رو روشن کنید.', false, '', false); return; }
+  if(Notification.permission !== 'granted'){ set('روی این گوشی، با هر سفارشِ جدید یک اعلان دریافت کنید.', true, 'فعال‌سازی', false); return; }
   try{
     const reg = await nexvSwRegistration();
     const sub = reg && await reg.pushManager.getSubscription();
-    if(sub && Notification.permission === 'granted'){
-      pushStatus('✅ اعلانِ سفارشِ جدید روی این دستگاه فعاله.'); en.textContent = 'ثبت دوباره'; te.style.display = '';
-    }else if(Notification.permission === 'denied'){
-      pushStatus('اجازه‌ی اعلان برای این سایت بسته شده؛ از تنظیماتِ گوشی/مرورگر، اعلان‌های NEXV رو روشن کنید.'); te.style.display = 'none';
-    }
-  }catch(_){}
+    if(sub && nexvPushRole() === 'admin') set('✅ اعلانِ سفارشِ جدید روی این دستگاه فعاله.', true, 'ثبت دوباره', true);
+    else set('اعلان روی این دستگاه روشنه؛ برای گرفتنِ اعلانِ سفارش‌ها، «فعال‌سازی» رو بزنید.', true, 'فعال‌سازی', false);
+  }catch(err){ set('سرویس‌ورکر ثبت نشد: ' + ((err && err.message) || err), true, 'تلاش دوباره', false); }
 }
-document.getElementById('adminPushEnable')?.addEventListener('click', async ()=>{
-  const btn = document.getElementById('adminPushEnable');
+async function nexvAdminPushEnableClick(btn){
   try{
     btn.disabled = true; pushStatus('در حال فعال‌سازی...');
-    const perm = await Notification.requestPermission();
-    if(perm !== 'granted'){ pushStatus('اجازه‌ی اعلان داده نشد.'); return; }
-    const reg = await nexvSwRegistration();
-    const kr = await fetch(window.NEXV_API_URL + '?action=push_vapid').then(r => r.json());
-    if(!kr || !kr.success) throw new Error(kr && kr.error || 'کلید اعلان دریافت نشد.');
-    let sub = await reg.pushManager.getSubscription();
-    if(sub){ try{ await sub.unsubscribe(); }catch(_){} }
-    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToBytes(kr.publicKey) });
-    const sr = await fetch(window.NEXV_API_URL + '?action=push_subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ subscription: sub.toJSON() }) }).then(r => r.json());
-    if(!sr || !sr.success) throw new Error(sr && sr.error || 'ثبت دستگاه ناموفق بود.');
+    const r = await nexvPushEnable();
+    if(r.role !== 'admin') throw new Error('این دستگاه به‌عنوان مدیر ثبت نشد؛ یک بار از حساب خارج و دوباره وارد شوید.');
     showToast('اعلانِ سفارشِ جدید روی این دستگاه فعال شد 🔔');
-    refreshPushUI();
-  }catch(err){ pushStatus('فعال‌سازی ممکن نشد: ' + (err && err.message ? err.message : err)); }
-  finally{ btn.disabled = false; }
-});
-document.getElementById('adminPushTest')?.addEventListener('click', async ()=>{
+    document.getElementById('nexvPushAsk')?.remove();
+  }catch(err){ showToast('فعال‌سازی ممکن نشد: ' + ((err && err.message) || err)); }
+  finally{ btn.disabled = false; refreshPushUI(); }
+}
+async function nexvAdminPushTestClick(){
   pushStatus('در حال ارسال اعلان آزمایشی...');
   try{
     const r = await fetch(window.NEXV_API_URL + '?action=push_test', { method:'POST' }).then(r => r.json());
-    pushStatus(r && r.success ? '✅ اعلان آزمایشی فرستاده شد؛ چند ثانیه‌ی دیگه روی گوشی میاد.' : ('ارسال نشد: ' + ((r && r.error) || 'خطای ناشناخته')));
+    const t = r && r.success ? '✅ اعلان آزمایشی فرستاده شد؛ چند ثانیه‌ی دیگه روی گوشی میاد.' : ('ارسال نشد: ' + ((r && r.error) || 'خطای ناشناخته'));
+    pushStatus(t); showToast(t);
   }catch(_){ pushStatus('اتصال به سرور ممکن نشد.'); }
+}
+document.getElementById('adminPushEnable')?.addEventListener('click', e => nexvAdminPushEnableClick(e.currentTarget));
+document.getElementById('adminPushTest')?.addEventListener('click', nexvAdminPushTestClick);
+document.getElementById('notifyDevEnable')?.addEventListener('click', e => nexvAdminPushEnableClick(e.currentTarget));
+document.getElementById('notifyDevTest')?.addEventListener('click', nexvAdminPushTestClick);
+
+/* ---- حساب کاربری ← اعلان‌ها (فقط مدیر): نوشتن و ارسالِ اعلان برای همه‌ی مشتری‌ها ---- */
+function nexvFaNum(n){ return Number(n || 0).toLocaleString('fa-IR'); }
+let notifyCounts = null;
+function loadNotifyStats(){
+  refreshPushUI();
+  const box = document.getElementById('notifyStats');
+  if(!box) return;
+  box.textContent = 'در حال بارگذاری...';
+  fetch(window.NEXV_API_URL + '?action=push_stats').then(r => r.json()).then(d => {
+    if(!d || !d.success){ box.textContent = (d && d.error) || 'دسترسی ممکن نشد؛ یک بار خارج و دوباره وارد شوید.'; return; }
+    notifyCounts = d.counts;
+    const last = d.last && d.last.broadcast;
+    box.innerHTML = `<div class="ns-row"><span class="ns-num">${nexvFaNum(d.counts.total)}</span><span>دستگاهِ مشترک</span></div>
+      <small>${nexvFaNum(d.counts.customer)} مشتری · ${nexvFaNum(d.counts.admin)} دستگاهِ مدیر</small>
+      ${last ? `<small>آخرین ارسال: ${new Date(last.at * 1000).toLocaleString('fa-IR', { dateStyle:'medium', timeStyle:'short' })} — ${nexvFaNum(last.sent)} از ${nexvFaNum(last.total)} دستگاه</small>` : ''}`;
+  }).catch(()=>{ box.textContent = 'اتصال به سرور ممکن نشد.'; });
+}
+function updateNotifyPreview(){
+  const t = (document.getElementById('notifyTitle')?.value || '').trim() || 'NEXV';
+  const b = (document.getElementById('notifyBody')?.value || '').trim() || 'متنِ اعلان اینجا نمایش داده می‌شه.';
+  const pt = document.getElementById('notifyPrevTitle'), pb = document.getElementById('notifyPrevBody');
+  if(pt) pt.textContent = t; if(pb) pb.textContent = b;
+}
+['notifyTitle', 'notifyBody'].forEach(id => document.getElementById(id)?.addEventListener('input', updateNotifyPreview));
+document.getElementById('notifyForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('notifySend'), res = document.getElementById('notifyResult');
+  const title = document.getElementById('notifyTitle').value.trim();
+  const body = document.getElementById('notifyBody').value.trim();
+  let url = document.getElementById('notifyUrl').value.trim();
+  if(!body){ showToast('متنِ اعلان رو بنویسید.'); return; }
+  if(url && !/^(https?:\/\/|\/)/i.test(url)) url = 'https://' + url;
+  const n = notifyCounts ? notifyCounts.total : 0;
+  if(!confirm(n ? `این اعلان برای ${nexvFaNum(n)} دستگاه فرستاده می‌شه. ارسال بشه؟` : 'اعلان برای همه‌ی دستگاه‌های مشترک فرستاده بشه؟')) return;
+  btn.classList.add('loading'); btn.disabled = true; res.textContent = '';
+  try{
+    const d = await fetch(window.NEXV_API_URL + '?action=push_broadcast', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ title, body, url }) }).then(r => r.json());
+    if(d && d.success){
+      const r = d.result;
+      res.textContent = `✅ برای ${nexvFaNum(r.sent)} دستگاه از ${nexvFaNum(r.total)} فرستاده شد.` + (r.removed ? ` (${nexvFaNum(r.removed)} اشتراکِ منقضی حذف شد)` : '');
+      showToast('اعلان فرستاده شد 🔔');
+      document.getElementById('notifyBody').value = ''; updateNotifyPreview();
+      loadNotifyStats();
+    }else{ res.textContent = (d && d.error) || 'ارسال ناموفق بود.'; }
+  }catch(_){ res.textContent = 'اتصال به سرور ممکن نشد.'; }
+  finally{ btn.classList.remove('loading'); btn.disabled = false; }
 });
-/* هر بار که مدیر سایت رو باز می‌کنه، توکنِ به‌روز به سرویس‌ورکر داده می‌شه (برای نمایشِ جزئیاتِ سفارش در اعلان) */
+
+/* با زدن روی اعلانِ سفارش، پنلِ سفارش‌ها مستقیم باز می‌شه */
 (function(){
   const u = currentUser();
-  if(u && u.is_admin && adminToken() && 'serviceWorker' in navigator){
-    navigator.serviceWorker.getRegistration(NEXV_SW_URL).then(reg => { if(reg && reg.active) reg.active.postMessage({ type:'nexv-admin-token', token: adminToken() }); }).catch(()=>{});
-  }
-  /* با زدن روی اعلان، پنلِ سفارش‌ها مستقیم باز می‌شه */
   if(new URLSearchParams(location.search).get('nexv_admin') === 'orders' && u && u.is_admin){
     try{ const x = new URL(location.href); x.searchParams.delete('nexv_admin'); history.replaceState(null, '', x.toString()); }catch(_){}
     setTimeout(()=> openAdmin(), 300);
@@ -5076,12 +5336,27 @@ if(stage){
       <svg class="account-menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>`;
     adminItem.addEventListener('click', ()=>{ closeAccount(); openAdmin(); });
     accMenu.insertBefore(adminItem, accMenu.firstChild);
+    /* اعلان‌ها: نوشتن و ارسالِ اعلان برای همه‌ی مشتری‌هایی که اجازه‌ی اعلان دادن */
+    const notifyItem = document.createElement('button');
+    notifyItem.type = 'button';
+    notifyItem.className = 'account-menu-item';
+    notifyItem.id = 'accountNotifyEntry';
+    notifyItem.style.display = 'none';
+    notifyItem.innerHTML = `
+      <span class="account-menu-ic">${NEXV_BELL_SVG}</span>
+      <span class="account-menu-text"><b>اعلان‌ها</b><small>ارسالِ اعلان برای همه‌ی مشتری‌ها</small></span>
+      <svg class="account-menu-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>`;
+    notifyItem.addEventListener('click', ()=> showAccountPane('notify'));
+    accMenu.insertBefore(notifyItem, adminItem.nextSibling);
+    const prevIc = document.getElementById('notifyPrevIcon');
+    if(prevIc){ try{ prevIc.src = new URL('logo.png', new URL(window.NEXV_API_URL, location.href)).href; }catch(_){} }
     const accOv = document.getElementById('accountOverlay');
     if(accOv){
       new MutationObserver(()=>{
         if(accOv.classList.contains('open')){
           const u = currentUser();
           adminItem.style.display = (u && u.is_admin) ? '' : 'none';
+          notifyItem.style.display = (u && u.is_admin) ? '' : 'none';
         }
       }).observe(accOv, { attributes:true, attributeFilter:['class'] });
     }

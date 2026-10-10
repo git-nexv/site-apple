@@ -3490,7 +3490,7 @@ function nexv_order_status_labels() {
 function nexv_notify_new_order($order, $detached = true) {
     update_option('nexv_unseen_orders', (int) get_option('nexv_unseen_orders', 0) + 1, false);
     /* اعلان روی گوشیِ مدیر (اگه دستگاهی ثبت شده باشه) */
-    if (function_exists('nexv_push_send_all') && nexv_push_subs()) { try { nexv_push_send_all(); } catch (\Throwable $e) {} }
+    if (function_exists('nexv_push_order_notify')) { try { nexv_push_order_notify($order); } catch (\Throwable $e) {} }
     $to = get_option('admin_email');
     /* ایمیل فقط وقتی فرستاده می‌شه که جوابِ مشتری از قبل کامل فرستاده شده باشه (معطلش نکنه) */
     if (!$detached || !$to || strpos($to, '@nexv.local') !== false) return;
@@ -3838,12 +3838,12 @@ add_action('admin_notices', function () {
 });
 
 /* =========================================================================
- * اعلانِ سفارشِ جدید روی گوشیِ مدیر (PWA + Web Push)
+ * اعلان‌ها (PWA + Web Push): اعلانِ سفارشِ جدید برای مدیر + اعلانِ همگانی برای مشتری‌ها
  * - کلیدهای VAPID یک‌بار روی خودِ سایت ساخته می‌شن (بدون سرویس یا کتابخونه‌ی بیرونی)
- * - اعلان بدونِ محتوا فرستاده می‌شه (رمزنگاریِ محتوا لازم نیست)؛ سرویس‌ورکر بعد از
- *   دریافت، خلاصه‌ی آخرین سفارش رو با توکنِ مدیر از سایت می‌گیره و نشون می‌ده
+ * - مشترک‌ها و ارسال: push-lib.php (مشترکِ همین فایل و api.php)
  * - روی آیفون فقط وقتی کار می‌کنه که سایت «Add to Home Screen» شده و از همون آیکون باز بشه
  * ========================================================================= */
+if (file_exists(get_template_directory() . '/push-lib.php')) require_once get_template_directory() . '/push-lib.php';
 function nexv_b64u($bin) { return rtrim(strtr(base64_encode($bin), '+/', '-_'), '='); }
 function nexv_vapid() {
     $v = get_option('nexv_vapid');
@@ -3858,122 +3858,53 @@ function nexv_vapid() {
     update_option('nexv_vapid', $v, false);
     return $v;
 }
-/* امضای ES256: خروجیِ DERِ openssl به فرمِ خامِ r||s (۶۴ بایت) تبدیل می‌شه */
-function nexv_der_to_raw($der) {
-    $pos = 2; if (ord($der[1]) & 0x80) $pos += ord($der[1]) & 0x7f;
-    $out = '';
-    for ($i = 0; $i < 2; $i++) {
-        $pos++; $len = ord($der[$pos]); $pos++;
-        $int = substr($der, $pos, $len); $pos += $len;
-        $out .= str_pad(ltrim($int, "\0"), 32, "\0", STR_PAD_LEFT);
-    }
-    return $out;
-}
-function nexv_vapid_jwt($endpoint) {
+function nexv_push_subject() { $e = (string) get_option('admin_email'); return 'mailto:' . (is_email($e) && strpos($e, '@nexv.local') === false ? $e : 'admin@nexv.ir'); }
+function nexv_push_data_dir() { return dirname(nexv_orders_db_path()); }
+/* اعلانِ سفارشِ جدید → فقط دستگاه‌های مدیر */
+function nexv_push_order_notify($order) {
+    if (!function_exists('nexv_pl_send')) return null;
     $v = nexv_vapid(); if (!$v) return null;
-    $p = wp_parse_url($endpoint);
-    $aud = $p['scheme'] . '://' . $p['host'];
-    $head = nexv_b64u(wp_json_encode(['typ' => 'JWT', 'alg' => 'ES256']));
-    $body = nexv_b64u(wp_json_encode(['aud' => $aud, 'exp' => time() + 12 * 3600, 'sub' => 'mailto:' . (get_option('admin_email') ?: 'admin@nexv.ir')], JSON_UNESCAPED_SLASHES));
-    $data = $head . '.' . $body;
-    if (!openssl_sign($data, $der, $v['private'], OPENSSL_ALGO_SHA256)) return null;
-    return $data . '.' . nexv_b64u(nexv_der_to_raw($der));
+    $items = implode('، ', array_map(function ($it) { return ($it['title'] ?? '') . ' ×' . (int) ($it['qty'] ?? 1); }, array_slice((array) ($order['items'] ?? []), 0, 3)));
+    return nexv_pl_send(nexv_push_data_dir(), $v, 'admins', [
+        'title' => '🛒 سفارش جدید #' . (int) ($order['id'] ?? 0),
+        'body'  => trim(($order['customerName'] ?? '') . ' — ' . number_format((int) ($order['grandTotal'] ?? 0)) . ' تومان' . ($items !== '' ? "\n" . $items : '')),
+        'url'   => home_url('/?nexv_admin=orders'),
+        'tag'   => 'nexv-order-' . (int) ($order['id'] ?? 0),
+    ], nexv_push_subject());
 }
-function nexv_push_subs() { return array_values(array_filter((array) get_option('nexv_push_subs', []), function ($s) { return !empty($s['endpoint']); })); }
-function nexv_push_subscribe($sub, $ua = '') {
-    $ep = esc_url_raw((string) ($sub['endpoint'] ?? ''), ['https']);
-    if (!$ep) return false;
-    $subs = array_values(array_filter(nexv_push_subs(), function ($s) use ($ep) { return $s['endpoint'] !== $ep; }));
-    $subs[] = ['endpoint' => $ep, 'ua' => substr(sanitize_text_field($ua), 0, 160), 'created' => time()];
-    update_option('nexv_push_subs', array_slice($subs, -20), false);
-    return true;
-}
-/* ارسال به همه‌ی دستگاه‌های ثبت‌شده‌ی مدیر؛ اشتراک‌های منقضی‌شده خودکار حذف می‌شن */
-function nexv_push_send_all() {
-    $v = nexv_vapid(); $subs = nexv_push_subs();
-    if (!$v || !$subs) return ['sent' => 0, 'total' => count($subs), 'errors' => $v ? [] : ['کلید VAPID ساخته نشد (OpenSSL)']];
-    $keep = []; $sent = 0; $errors = [];
-    foreach ($subs as $s) {
-        $jwt = nexv_vapid_jwt($s['endpoint']);
-        $res = wp_remote_post($s['endpoint'], ['timeout' => 12, 'body' => '', 'headers' => [
-            'TTL' => '86400', 'Urgency' => 'high', 'Content-Length' => '0',
-            'Authorization' => 'vapid t=' . $jwt . ', k=' . $v['public'],
-        ]]);
-        $code = is_wp_error($res) ? 0 : (int) wp_remote_retrieve_response_code($res);
-        if ($code >= 200 && $code < 300) { $sent++; $keep[] = $s; continue; }
-        if (in_array($code, [404, 410], true)) continue;   // دستگاه دیگه این اشتراک رو نداره
-        $keep[] = $s;
-        $errors[] = (wp_parse_url($s['endpoint'], PHP_URL_HOST) ?: '?') . ': ' . (is_wp_error($res) ? $res->get_error_message() : ('HTTP ' . $code . ' ' . substr((string) wp_remote_retrieve_body($res), 0, 120)));
-    }
-    update_option('nexv_push_subs', $keep, false);
-    $r = ['sent' => $sent, 'total' => count($subs), 'errors' => $errors, 'at' => time()];
-    update_option('nexv_push_last', $r, false);
-    return $r;
+/* دستگاه‌هایی که با نسخه‌ی قبلی (لیستِ داخلِ تنظیماتِ وردپرس) ثبت شده بودن، یک‌بار منتقل می‌شن */
+add_action('admin_init', function () {
+    $old = get_option('nexv_push_subs', null);
+    if (!is_array($old) || !function_exists('nexv_pl_subscribe')) return;
+    foreach ($old as $s) { if (!empty($s['endpoint'])) nexv_pl_subscribe(nexv_push_data_dir(), ['endpoint' => $s['endpoint']], true, $s['ua'] ?? ''); }
+    delete_option('nexv_push_subs'); delete_option('nexv_push_last'); delete_option('nexv_push_test_until');
+});
+function nexv_manifest_data() {
+    $logo = get_template_directory_uri() . '/logo.png';
+    return [
+        'name' => 'NEXV — فروشگاه قطعات اپل', 'short_name' => 'NEXV', 'lang' => 'fa', 'dir' => 'rtl', 'id' => home_url('/'),
+        'start_url' => home_url('/?source=pwa'), 'scope' => home_url('/'), 'display' => 'standalone',
+        'background_color' => '#f3f1f9', 'theme_color' => '#6a4dff',
+        'icons' => [['src' => $logo, 'sizes' => '300x300', 'type' => 'image/png', 'purpose' => 'any'], ['src' => $logo, 'sizes' => '192x192', 'type' => 'image/png'], ['src' => $logo, 'sizes' => '512x512', 'type' => 'image/png']],
+    ];
 }
 
-/* manifest و سرویس‌ورکر از ریشه‌ی سایت (برای اینکه اعلان روی کلِ سایت کار کنه) */
+/* راه‌های جایگزین برای سرویس‌ورکر و manifest (اصلی‌ها از api.php سرو می‌شن):
+   /?nexv_sw=1 و /?nexv_manifest=1 ، و آدرس‌های قبلی /nexv-sw.js و /nexv-manifest.webmanifest */
 add_action('init', function () {
+    if (!function_exists('nexv_pl_serve_sw')) return;
     $path = trim((string) wp_parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
     $base = trim((string) wp_parse_url(home_url('/'), PHP_URL_PATH), '/');
     if ($base !== '' && strpos($path, $base) === 0) $path = trim(substr($path, strlen($base)), '/');
-    if ($path === 'nexv-manifest.webmanifest') {
+    if ($path === 'nexv-manifest.webmanifest' || ($path === '' && isset($_GET['nexv_manifest']))) {
+        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
         header('Content-Type: application/manifest+json; charset=utf-8');
         header('Cache-Control: public, max-age=3600');
-        $logo = get_template_directory_uri() . '/logo.png';
-        echo wp_json_encode([
-            'name' => 'NEXV — فروشگاه قطعات اپل', 'short_name' => 'NEXV', 'lang' => 'fa', 'dir' => 'rtl',
-            'start_url' => home_url('/?source=pwa'), 'scope' => home_url('/'), 'display' => 'standalone',
-            'background_color' => '#f3f1f9', 'theme_color' => '#6a4dff',
-            'icons' => [['src' => $logo, 'sizes' => '300x300', 'type' => 'image/png', 'purpose' => 'any'], ['src' => $logo, 'sizes' => '192x192', 'type' => 'image/png'], ['src' => $logo, 'sizes' => '512x512', 'type' => 'image/png']],
-        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        echo wp_json_encode(nexv_manifest_data(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         exit;
     }
-    if ($path === 'nexv-sw.js') {
-        header('Content-Type: application/javascript; charset=utf-8');
-        header('Service-Worker-Allowed: /');
-        header('Cache-Control: no-cache');
-        $api = get_template_directory_uri() . '/api.php';
-        $icon = get_template_directory_uri() . '/logo.png';
-        $home = home_url('/');
-        ?>
-/* NEXV service worker — فقط برای اعلانِ سفارشِ جدید؛ هیچ درخواستی از سایت رو کش یا دست‌کاری نمی‌کنه */
-const API = <?php echo wp_json_encode($api); ?>, ICON = <?php echo wp_json_encode($icon); ?>, HOME = <?php echo wp_json_encode($home); ?>;
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-async function getToken(){ try{ const c = await caches.open('nexv-admin'); const r = await c.match('/__nexv_admin_token'); return r ? await r.text() : ''; }catch(_){ return ''; } }
-self.addEventListener('message', e => {
-  if(e.data && e.data.type === 'nexv-admin-token'){
-    e.waitUntil(caches.open('nexv-admin').then(c => c.put('/__nexv_admin_token', new Response(String(e.data.token || '')))));
-  }
-});
-self.addEventListener('push', e => {
-  e.waitUntil((async () => {
-    let title = '🛒 سفارش جدید ثبت شد', body = 'برای دیدن جزئیات، پنل سفارش‌ها رو باز کنید.', tag = 'nexv-order';
-    try{
-      const t = await getToken();
-      const r = await fetch(API + '?action=latest_order_brief', { headers: t ? { 'X-NEXV-Admin': t } : {}, credentials: 'include' });
-      const d = await r.json();
-      if(d && d.success && d.order){
-        const o = d.order;
-        title = '🛒 سفارش جدید #' + o.id;
-        body = (o.customerName || '') + ' — ' + Number(o.grandTotal || 0).toLocaleString('fa-IR') + ' تومان' + (o.items ? '\n' + o.items : '');
-        tag = 'nexv-order-' + o.id;
-        if(d.test){ title = '🔔 اعلان آزمایشی NEXV'; body = 'اعلان‌های سفارش جدید روی این دستگاه فعاله ✅'; tag = 'nexv-test'; }
-      }
-    }catch(_){}
-    await self.registration.showNotification(title, { body, icon: ICON, badge: ICON, tag, renotify: true, dir: 'rtl', lang: 'fa', data: { url: HOME + '?nexv_admin=orders' } });
-  })());
-});
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || HOME;
-  e.waitUntil((async () => {
-    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for(const c of list){ if('focus' in c){ await c.focus(); if('navigate' in c) return c.navigate(url); return; } }
-    return self.clients.openWindow(url);
-  })());
-});
-<?php
-        exit;
+    if ($path === 'nexv-sw.js' || ($path === '' && isset($_GET['nexv_sw']))) {
+        if (!defined('DONOTCACHEPAGE')) define('DONOTCACHEPAGE', true);
+        nexv_pl_serve_sw();
     }
 }, 0);

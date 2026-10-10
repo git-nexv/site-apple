@@ -349,7 +349,7 @@ $nexv_icon_tags = (function_exists('has_site_icon') && has_site_icon())
     ? '<link rel="icon" href="' . esc_url(get_site_icon_url(192)) . '"><link rel="apple-touch-icon" href="' . esc_url(get_site_icon_url(180)) . '">'
     : nexv_favicon_tags();
 /* PWA: نصب روی صفحه‌ی اصلیِ گوشی (برای اعلانِ سفارشِ جدید روی آیفون لازمه) */
-$nexv_icon_tags .= '<link rel="manifest" href="' . esc_url(home_url('/nexv-manifest.webmanifest')) . '">'
+$nexv_icon_tags .= '<link rel="manifest" href="' . esc_url(get_template_directory_uri() . '/api.php?action=manifest') . '">'
     . '<meta name="theme-color" content="#6a4dff"><meta name="apple-mobile-web-app-capable" content="yes">'
     . '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="NEXV">'
     . '<meta name="apple-mobile-web-app-status-bar-style" content="default">';
@@ -522,6 +522,9 @@ if (function_exists('is_singular') && is_singular('nexv_product')) {
 
 $inject = "<script>\nwindow.NEXV_API_URL = " . json_encode($api_url) . ";\n";
 $inject .= "window.NEXV_HOME_URL = " . json_encode($home_url) . ";\n";
+/* کلیدِ عمومیِ اعلان‌ها (برای پرسیدنِ اجازه‌ی اعلان از بازدیدکننده‌ها) */
+$nexv_vapid_pub = function_exists('nexv_vapid') ? (nexv_vapid()['public'] ?? '') : '';
+$inject .= "window.NEXV_PUSH_KEY = " . json_encode((string) $nexv_vapid_pub) . ";\n";
 /* شماره‌ی تماسِ همون نوارِ بالای سایت رو به جاوااسکریپت هم می‌فرستیم تا روی
    عبارت «برای دریافت قیمت تماس بگیرید» هم بشه با تپ مستقیم تماس گرفت. */
 $inject .= "window.NEXV_CONTACT_PHONE = " . json_encode(get_theme_mod('nexv_contact_phone', '09109973428')) . ";\n";
