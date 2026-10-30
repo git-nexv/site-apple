@@ -55,15 +55,13 @@ add_action('admin_bar_menu', function ($wp_admin_bar) {
    وردپرس (با نقش مدیر کل) براش ساخته/باز می‌شه تا نوار پیشخوان رو ببینه. */
 define('NEXV_OWNER_PHONE', '09109973428');
 
-function nexv_bridge_wp_session($phone) {
-    if ($phone !== NEXV_OWNER_PHONE) return;
-
-    $wp_user = get_user_by('login', 'nexv-owner');
-    if (!$wp_user) {
-        $existing_email_user = get_user_by('email', 'owner@nexv.local');
-        if ($existing_email_user) {
-            $wp_user = $existing_email_user;
-        } else {
+/* $user: حسابِ NEXV (خروجیِ public_user در api.php). مدیرِ کل → حسابِ «nexv-owner» با نقشِ
+   مدیر کل وردپرس؛ ادمینِ زیرمجموعه با دسترسیِ «محصولات» → حسابِ جدا با نقشِ «ویرایشگر»
+   (فقط محصولات/دسته‌ها/مقالات؛ نه تنظیمات، افزونه‌ها یا به‌روزرسانیِ قالب). بقیه سشنِ وردپرس نمی‌گیرن. */
+function nexv_wp_user_for_admin($user, $create = false) {
+    if (!empty($user['is_owner'])) {
+        $wp_user = get_user_by('login', 'nexv-owner') ?: get_user_by('email', 'owner@nexv.local');
+        if (!$wp_user && $create) {
             $new_id = wp_insert_user([
                 'user_login'   => 'nexv-owner',
                 'user_pass'    => wp_generate_password(24, true, true),
@@ -73,13 +71,71 @@ function nexv_bridge_wp_session($phone) {
             ]);
             if (!is_wp_error($new_id)) { $wp_user = get_user_by('id', $new_id); }
         }
+        return $wp_user ?: null;
     }
+    if (empty($user['id'])) return null;
+    $login = 'nexv-admin-' . (int) $user['id'];
+    $wp_user = get_user_by('login', $login);
+    if (!$wp_user && $create) {
+        $new_id = wp_insert_user([
+            'user_login'   => $login,
+            'user_pass'    => wp_generate_password(24, true, true),
+            'user_email'   => 'admin-' . (int) $user['id'] . '@nexv.local',
+            'display_name' => trim(($user['firstName'] ?? '') . ' ' . ($user['lastName'] ?? '')) ?: $login,
+            'role'         => 'editor',
+        ]);
+        if (!is_wp_error($new_id)) { $wp_user = get_user_by('id', $new_id); }
+    }
+    return $wp_user ?: null;
+}
+function nexv_admin_has_wp_access($user) {
+    return !empty($user['is_admin']) && (!empty($user['is_owner']) || in_array('products', (array) ($user['perms'] ?? []), true));
+}
+/* نقشِ وردپرسیِ ادمین‌های زیرمجموعه با دسترسی‌هاشون هماهنگ می‌شه (برداشتنِ دسترسی = خروج از پیشخوان) */
+function nexv_wp_admin_sync($user) {
+    if (!empty($user['is_owner'])) return;
+    $wp_user = nexv_wp_user_for_admin($user, nexv_admin_has_wp_access($user));
+    if (!$wp_user) return;
+    if (nexv_admin_has_wp_access($user)) {
+        if (!in_array('editor', (array) $wp_user->roles, true)) $wp_user->set_role('editor');
+    } else {
+        $wp_user->set_role('subscriber');
+        if (class_exists('WP_Session_Tokens')) WP_Session_Tokens::get_instance($wp_user->ID)->destroy_all();
+    }
+}
+/* بعد از تغییرِ رمز: بقیه‌ی سشن‌های وردپرسِ همین ادمین بسته می‌شن (سشنِ همین مرورگر می‌مونه) */
+function nexv_wp_admin_logout_others($user) {
+    $wp_user = nexv_wp_user_for_admin($user, false);
+    if (!$wp_user || !class_exists('WP_Session_Tokens')) return;
+    $mgr = WP_Session_Tokens::get_instance($wp_user->ID);
+    if (get_current_user_id() === (int) $wp_user->ID && function_exists('wp_get_session_token') && wp_get_session_token()) $mgr->destroy_others(wp_get_session_token());
+    else $mgr->destroy_all();
+}
+function nexv_bridge_wp_session($phone, $user = null) {
+    if ($user === null) {
+        if ($phone !== NEXV_OWNER_PHONE) return;
+        $user = ['is_admin' => true, 'is_owner' => true];
+    }
+    if (!nexv_admin_has_wp_access($user)) return;
+    nexv_wp_admin_sync($user);
+    $wp_user = nexv_wp_user_for_admin($user, true);
     if ($wp_user && !is_wp_error($wp_user)) {
         wp_clear_auth_cookie();
         wp_set_current_user($wp_user->ID);
         wp_set_auth_cookie($wp_user->ID, true);
     }
 }
+/* رمزِ مدیرِ کل عوض شد (مهر ۱۴۰۵): یک‌بار همه‌ی سشن‌های قبلیِ پیشخوانِ مدیر بسته می‌شن،
+   به‌جز سشنِ همین مرورگری که الان داره قالب رو به‌روزرسانی می‌کنه */
+add_action('init', function () {
+    if (get_option('nexv_owner_sessions_reset_202610')) return;
+    update_option('nexv_owner_sessions_reset_202610', time(), false);
+    $wp_user = get_user_by('login', 'nexv-owner');
+    if (!$wp_user || !class_exists('WP_Session_Tokens')) return;
+    $mgr = WP_Session_Tokens::get_instance($wp_user->ID);
+    if (get_current_user_id() === (int) $wp_user->ID && wp_get_session_token()) $mgr->destroy_others(wp_get_session_token());
+    else $mgr->destroy_all();
+}, 20);
 
 function nexv_theme_setup() {
     add_theme_support('title-tag');

@@ -745,6 +745,35 @@ footer{border-top:1px solid var(--border); padding:40px 0 22px;}
 .admin-tabs{display:flex; gap:8px; margin:14px 0 4px; border-bottom:1px solid var(--border);}
 .admin-tab{padding:10px 4px; margin-inline-end:18px; background:transparent; border:none; border-bottom:2px solid transparent; color:var(--text-dim); font-size:14px; font-weight:700; cursor:pointer;}
 .admin-tab.active{color:var(--accent); border-bottom-color:var(--accent);}
+/* ادمینِ بدونِ دسترسیِ «تغییرِ وضعیت»، دکمه‌های وضعیت رو نمی‌بینه (سمتِ سرور هم بسته‌ست) */
+#adminOverlay.no-order-status .order-action-btn, #adminOverlay.no-order-status .order-stage-btn{display:none !important;}
+/* تبِ ادمین‌ها */
+.adm-card{display:flex; flex-direction:column; padding:14px; border-radius:18px; border:1px solid var(--border); background:var(--bg-elev-2); margin:12px 0;}
+.adm-card-head{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+.adm-ic{width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--accent),var(--accent-2)); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.adm-ic svg{width:19px; height:19px; stroke:#fff;}
+.adm-card-head b{display:block; font-size:14.5px;} .adm-card-head small{font-size:12px; color:var(--text-dim);}
+.adm-wp-link{display:block; text-align:center; margin-top:12px; font-size:12.5px; font-weight:700; color:var(--accent); text-decoration:none;}
+.adm-sec-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin:20px 0 4px;}
+.adm-sec-head b{font-size:14.5px;} .adm-sec-head .btn{padding:8px 14px; font-size:12.5px;}
+.adm-edit-title{font-size:14px; margin-bottom:12px;}
+.adm-list{display:flex; flex-direction:column; gap:10px; margin-top:10px;}
+.adm-row{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:14px;}
+.adm-row-main{display:flex; flex-direction:column; gap:4px; min-width:0;}
+.adm-row-main b{font-size:13.5px;} .adm-row-main small{font-size:12px; color:var(--text-dim);}
+.adm-row-main .adm-phone{direction:ltr; text-align:right;}
+.adm-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:2px;}
+.adm-chip{font-size:11px; padding:3px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-weight:700;}
+.adm-row-btns{display:flex; flex-direction:column; gap:6px; flex-shrink:0;}
+.adm-row-btns .btn{padding:6px 12px; font-size:12px; justify-content:center;}
+.adm-row-btns .adm-del{color:var(--danger);}
+.adm-perms-title{font-size:12.5px; font-weight:700; color:var(--text-dim); margin:4px 0 8px;}
+.adm-perms{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+.adm-perm{display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; cursor:pointer; font-size:13px; line-height:1.6; transition:border-color .2s ease, background .2s ease;}
+.adm-perm input{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0; margin:0;}
+.adm-perm.on{border-color:var(--accent); background:var(--accent-soft);}
+.adm-edit-btns{display:flex; gap:8px; justify-content:flex-end;}
+.adm-edit-btns .btn{padding:9px 18px; font-size:13px;}
 .admin-customer-row{
   display:flex; align-items:center; justify-content:space-between; width:100%; padding:12px 14px;
   border:1px solid var(--border); border-radius:12px; background:transparent; text-align:right; cursor:pointer;
@@ -2155,6 +2184,7 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
     <div class="admin-tabs" id="adminTabs">
       <button type="button" class="admin-tab active" data-tab="orders">سفارش‌ها</button>
       <button type="button" class="admin-tab" data-tab="customers">مشتریان</button>
+      <button type="button" class="admin-tab" data-tab="admins" id="adminTabAdmins">ادمین‌ها</button>
     </div>
 
     <div id="adminOrdersPane">
@@ -2177,6 +2207,45 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
       <div id="customerDetailView" style="display:none;">
         <button type="button" class="account-back" id="customerDetailBack">→ بازگشت به فهرست مشتریان</button>
         <div id="customerDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- ادمین‌ها: حسابِ خودِ ادمین + ادمین‌های زیرمجموعه (فقط مدیرِ کل) -->
+    <div id="adminAdminsPane" style="display:none;">
+      <form class="adm-card" id="adminMeForm" autocomplete="off">
+        <div class="adm-card-head">
+          <span class="adm-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+          <div><b id="adminMeName">حساب من</b><small id="adminMeRole"></small></div>
+        </div>
+        <div class="field"><label>شماره موبایل (برای ورود)</label><input type="tel" id="adminMePhone" inputmode="numeric" maxlength="11" dir="ltr" autocomplete="off"></div>
+        <div class="name-row">
+          <div class="field"><label>رمزِ جدید</label><input type="password" id="adminMeNewPass" autocomplete="new-password" placeholder="خالی = بدون تغییر"></div>
+          <div class="field"><label>تکرارِ رمزِ جدید</label><input type="password" id="adminMeNewPass2" autocomplete="new-password"></div>
+        </div>
+        <div class="field"><label>رمزِ فعلی (برای تأیید)</label><input type="password" id="adminMeCurPass" autocomplete="current-password"></div>
+        <button type="submit" class="submit-btn btn btn-primary" id="adminMeSave"><span class="spinner"></span><span class="btn-text">ذخیره‌ی تغییرات</span></button>
+        <a class="adm-wp-link" id="adminWpLink" href="#" style="display:none;">ورود به پیشخوانِ وردپرس ←</a>
+      </form>
+
+      <div id="adminSubSection" style="display:none;">
+        <div class="adm-sec-head"><b>ادمین‌های زیرمجموعه</b><button type="button" class="btn btn-primary" id="adminAddBtn">+ افزودن ادمین</button></div>
+        <form class="adm-card" id="adminEditForm" style="display:none;" autocomplete="off">
+          <input type="hidden" id="admEditId" value="">
+          <b class="adm-edit-title" id="admEditTitle">ادمینِ جدید</b>
+          <div class="name-row">
+            <div class="field"><label>نام</label><input type="text" id="admFirst"></div>
+            <div class="field"><label>نام خانوادگی</label><input type="text" id="admLast"></div>
+          </div>
+          <div class="field"><label>شماره موبایل (برای ورود)</label><input type="tel" id="admPhone" inputmode="numeric" maxlength="11" dir="ltr" autocomplete="off"></div>
+          <div class="field"><label id="admPassLabel">رمزِ ورود (حداقل ۸ کاراکتر)</label><input type="text" id="admPass" dir="ltr" autocomplete="off" spellcheck="false"></div>
+          <div class="adm-perms-title">به چه بخش‌هایی دسترسی داشته باشه؟</div>
+          <div class="adm-perms" id="admPerms"></div>
+          <div class="adm-edit-btns">
+            <button type="button" class="btn btn-ghost" id="admCancel">انصراف</button>
+            <button type="submit" class="btn btn-primary" id="admSave">ذخیره</button>
+          </div>
+        </form>
+        <div class="adm-list" id="adminSubList"></div>
       </div>
     </div>
   </div>
@@ -4280,12 +4349,61 @@ const adminOverlay = document.getElementById('adminOverlay');
 let adminOrdersCache = [];
 let adminOpenOrderId = null;
 
+/* دسترسی‌های ادمینِ فعلی (مدیرِ کل همه‌چیز؛ ادمینِ زیرمجموعه فقط چیزهایی که مدیرِ کل داده) */
+const ADMIN_PERM_SHORT = { orders:'سفارش‌ها', order_status:'تغییر وضعیت', customers:'مشتری‌ها', notify:'اعلان‌ها', products:'محصولات' };
+const ADMIN_PERM_ALL = Object.keys(ADMIN_PERM_SHORT);
+function adminPerms(u){
+  u = u || currentUser();
+  if(!u || !u.is_admin) return [];
+  if(u.is_owner || !Array.isArray(u.perms)) return ADMIN_PERM_ALL.slice();
+  return u.perms;
+}
+function adminCan(p, u){ return adminPerms(u).includes(p); }
+function applyAdminTabs(){
+  const u = currentUser();
+  const tabs = { orders: adminCan('orders', u), customers: adminCan('customers', u), admins: true };
+  document.querySelectorAll('.admin-tab').forEach(t => { t.style.display = tabs[t.dataset.tab] ? '' : 'none'; });
+  const at = document.getElementById('adminTabAdmins');
+  if(at) at.textContent = (u && u.is_owner) ? 'ادمین‌ها' : 'حساب من';
+  adminOverlay.classList.toggle('no-order-status', !adminCan('order_status', u));
+  return tabs;
+}
+function showAdminTab(name){
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.getElementById('adminOrdersPane').style.display = name === 'orders' ? 'block' : 'none';
+  document.getElementById('adminCustomersPane').style.display = name === 'customers' ? 'block' : 'none';
+  document.getElementById('adminAdminsPane').style.display = name === 'admins' ? 'block' : 'none';
+  if(name === 'orders') loadAdminOrders();
+  else if(name === 'customers') loadCustomers();
+  else loadAdminsPane();
+}
+function firstAdminTab(){ const t = applyAdminTabs(); return t.orders ? 'orders' : (t.customers ? 'customers' : 'admins'); }
+/* دسترسی‌ها از سرور تازه می‌شن (اگه مدیرِ کل در این فاصله عوضشون کرده باشه) */
+function refreshAdminMe(){
+  return fetch(window.NEXV_API_URL + '?action=admin_me').then(r => r.json()).then(d => {
+    if(!d || !d.success || !d.user) return;
+    const before = JSON.stringify(adminPerms());
+    localStorage.setItem('nexv_user', JSON.stringify(d.user));
+    if(JSON.stringify(adminPerms()) !== before && adminOverlay.classList.contains('open')){
+      const active = document.querySelector('.admin-tab.active');
+      const tabs = applyAdminTabs();
+      if(!active || !tabs[active.dataset.tab]) showAdminTab(firstAdminTab());
+    }
+  }).catch(()=>{});
+}
+
 function openAdmin(){
   const user = currentUser();
   if(!user || !user.is_admin) return;
   adminOverlay.classList.add('open');
   lockBodyScroll();
   adminOpenOrderId = null;
+  showAdminTab(firstAdminTab());
+  refreshAdminMe();
+}
+function loadAdminOrders(){
+  const user = currentUser();
+  if(!user) return;
   refreshPushUI();
   const list = document.getElementById('adminOrdersList');
   list.innerHTML = '<p style="text-align:center; color:var(--text-dim); padding:20px 0;">در حال بارگذاری...</p>';
@@ -4294,7 +4412,7 @@ function openAdmin(){
     .then(data => {
       if(!data || !data.success){
         list.innerHTML = `<div style="text-align:center; color:var(--text-dim); padding:10px 0;">
-          <p style="margin:0 0 14px;">نشستِ مدیریت منقضی شده؛ برای دیدنِ سفارش‌ها یک بار دوباره وارد شوید.</p>
+          <p style="margin:0 0 14px;">${escHtml((data && data.error) || 'نشستِ مدیریت منقضی شده؛ برای دیدنِ سفارش‌ها یک بار دوباره وارد شوید.')}</p>
           <button type="button" class="btn btn-primary" id="adminRelogin">ورود دوباره</button></div>`;
         document.getElementById('adminRelogin')?.addEventListener('click', ()=>{
           const phone = (currentUser() || {}).phone || '';
@@ -4593,20 +4711,133 @@ adminOverlay.addEventListener('click', e=>{ if(e.target===adminOverlay) closeAdm
 /* ---------------- تب مشتریان (فقط ادمین) ---------------- */
 let customersCache = [];
 document.querySelectorAll('.admin-tab').forEach(tab=>{
-  tab.addEventListener('click', ()=>{
-    document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
-    tab.classList.add('active');
-    const ordersPane = document.getElementById('adminOrdersPane');
-    const customersPane = document.getElementById('adminCustomersPane');
-    if(tab.dataset.tab === 'customers'){
-      ordersPane.style.display = 'none';
-      customersPane.style.display = 'block';
-      loadCustomers();
-    }else{
-      ordersPane.style.display = 'block';
-      customersPane.style.display = 'none';
-    }
-  });
+  tab.addEventListener('click', ()=> showAdminTab(tab.dataset.tab));
+});
+
+/* ---------------- تبِ ادمین‌ها: رمز/شماره‌ی خودِ ادمین + ادمین‌های زیرمجموعه ---------------- */
+let adminPermLabels = null, adminListCache = [];
+function loadAdminsPane(){
+  const u = currentUser() || {};
+  document.getElementById('adminMeName').textContent = ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || 'حساب من';
+  document.getElementById('adminMeRole').textContent = u.is_owner ? 'مدیرِ کل — دسترسی به همه‌ی بخش‌ها' : ('ادمین — ' + (adminPerms(u).map(p => ADMIN_PERM_SHORT[p]).filter(Boolean).join('، ') || 'بدون دسترسی'));
+  document.getElementById('adminMePhone').value = u.phone || '';
+  ['adminMeNewPass', 'adminMeNewPass2', 'adminMeCurPass'].forEach(id => { document.getElementById(id).value = ''; });
+  const wp = document.getElementById('adminWpLink');
+  if(wp){ wp.style.display = adminCan('products', u) ? '' : 'none'; try{ wp.href = new URL('wp-admin/', new URL(HOME_URL, location.origin)).href; }catch(_){} }
+  document.getElementById('adminSubSection').style.display = u.is_owner ? '' : 'none';
+  document.getElementById('adminEditForm').style.display = 'none';
+  if(u.is_owner) loadAdminList();
+}
+function loadAdminList(){
+  const list = document.getElementById('adminSubList');
+  list.innerHTML = '<p style="text-align:center; color:var(--text-dim); padding:12px 0;">در حال بارگذاری...</p>';
+  fetch(window.NEXV_API_URL + '?action=admin_list').then(r => r.json()).then(d => {
+    if(!d || !d.success){ list.innerHTML = `<p style="text-align:center; color:var(--text-dim);">${escHtml((d && d.error) || 'دسترسی ممکن نشد؛ یک بار خارج و دوباره وارد شوید.')}</p>`; return; }
+    adminPermLabels = d.labels || adminPermLabels;
+    adminListCache = (d.admins || []).filter(a => !a.is_owner);
+    if(!adminListCache.length){ list.innerHTML = '<p style="text-align:center; color:var(--text-dim); font-size:13px; padding:8px 0;">هنوز ادمینِ زیرمجموعه‌ای اضافه نکردید.</p>'; return; }
+    list.innerHTML = adminListCache.map(a => `
+      <div class="adm-row">
+        <div class="adm-row-main">
+          <b>${escHtml(((a.firstName || '') + ' ' + (a.lastName || '')).trim() || 'ادمین')}</b>
+          <small class="adm-phone">${escHtml(a.phone)}</small>
+          <div class="adm-chips">${(a.perms || []).map(p => `<span class="adm-chip">${escHtml(ADMIN_PERM_SHORT[p] || p)}</span>`).join('')}</div>
+          <small>${a.last_login ? 'آخرین ورود: ' + new Date(a.last_login).toLocaleString('fa-IR', { dateStyle:'medium', timeStyle:'short' }) : 'هنوز وارد نشده'}</small>
+        </div>
+        <div class="adm-row-btns">
+          <button type="button" class="btn btn-ghost" data-adm-edit="${a.id}">ویرایش</button>
+          <button type="button" class="btn btn-ghost adm-del" data-adm-del="${a.id}">حذف</button>
+        </div>
+      </div>`).join('');
+    list.querySelectorAll('[data-adm-edit]').forEach(b => b.addEventListener('click', ()=> openAdminEdit(adminListCache.find(a => String(a.id) === b.dataset.admEdit))));
+    list.querySelectorAll('[data-adm-del]').forEach(b => b.addEventListener('click', ()=> removeAdmin(adminListCache.find(a => String(a.id) === b.dataset.admDel))));
+  }).catch(()=>{ list.innerHTML = '<p style="text-align:center; color:var(--text-dim);">اتصال به سرور ممکن نشد.</p>'; });
+}
+function openAdminEdit(a){
+  const f = document.getElementById('adminEditForm');
+  document.getElementById('admEditId').value = a ? a.id : '';
+  document.getElementById('admEditTitle').textContent = a ? 'ویرایشِ ادمین' : 'ادمینِ جدید';
+  document.getElementById('admFirst').value = a ? (a.firstName || '') : '';
+  document.getElementById('admLast').value = a ? (a.lastName || '') : '';
+  document.getElementById('admPhone').value = a ? (a.phone || '') : '';
+  document.getElementById('admPass').value = '';
+  document.getElementById('admPass').placeholder = a ? 'خالی بذارید تا عوض نشه' : '';
+  document.getElementById('admPassLabel').textContent = a ? 'رمزِ جدید (اختیاری)' : 'رمزِ ورود (حداقل ۸ کاراکتر)';
+  const labels = adminPermLabels || ADMIN_PERM_SHORT;
+  const have = a ? (a.perms || []) : ['orders'];
+  const box = document.getElementById('admPerms');
+  box.innerHTML = Object.keys(labels).map(k => `<label class="adm-perm${have.includes(k) ? ' on' : ''}"><input type="checkbox" value="${k}"${have.includes(k) ? ' checked' : ''}><span>${escHtml(labels[k])}</span></label>`).join('');
+  box.querySelectorAll('input').forEach(inp => inp.addEventListener('change', ()=>{
+    /* «تغییرِ وضعیت» بدونِ «دیدنِ سفارش‌ها» معنی نداره */
+    const get = v => box.querySelector(`input[value="${v}"]`);
+    if(inp.value === 'order_status' && inp.checked && get('orders')) get('orders').checked = true;
+    if(inp.value === 'orders' && !inp.checked && get('order_status')) get('order_status').checked = false;
+    box.querySelectorAll('.adm-perm').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+  }));
+  f.style.display = 'flex';
+  f.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+document.getElementById('adminAddBtn')?.addEventListener('click', ()=> openAdminEdit(null));
+document.getElementById('admCancel')?.addEventListener('click', ()=>{ document.getElementById('adminEditForm').style.display = 'none'; });
+document.getElementById('adminEditForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('admSave');
+  const id = document.getElementById('admEditId').value;
+  const payload = {
+    id: id ? Number(id) : 0,
+    firstName: document.getElementById('admFirst').value.trim(),
+    lastName: document.getElementById('admLast').value.trim(),
+    phone: document.getElementById('admPhone').value.replace(/[^0-9۰-۹]/g, '').replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)),
+    password: document.getElementById('admPass').value,
+    perms: [...document.querySelectorAll('#admPerms input:checked')].map(i => i.value),
+  };
+  if(!/^09\d{9}$/.test(payload.phone)){ showToast('شماره موبایل باید ۱۱ رقم و به‌صورت 09xxxxxxxxx باشد.'); return; }
+  if(!id && payload.password.length < 8){ showToast('برای ادمینِ جدید یک رمز (حداقل ۸ کاراکتر) تعیین کنید.'); return; }
+  if(payload.password && payload.password.length < 8){ showToast('رمز باید حداقل ۸ کاراکتر باشد.'); return; }
+  if(!payload.perms.length){ showToast('حداقل یک دسترسی انتخاب کنید.'); return; }
+  btn.disabled = true;
+  try{
+    const d = await fetch(window.NEXV_API_URL + '?action=admin_save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(r => r.json());
+    if(!d || !d.success){ showToast((d && d.error) || 'ذخیره نشد.'); return; }
+    document.getElementById('adminEditForm').style.display = 'none';
+    showToast(id ? 'ادمین به‌روزرسانی شد ✅' : 'ادمینِ جدید اضافه شد ✅');
+    loadAdminList();
+  }catch(_){ showToast('اتصال به سرور ممکن نشد.'); }
+  finally{ btn.disabled = false; }
+});
+async function removeAdmin(a){
+  if(!a) return;
+  const name = ((a.firstName || '') + ' ' + (a.lastName || '')).trim() || a.phone;
+  if(!confirm(`دسترسیِ ادمینِ «${name}» برداشته بشه؟ حسابش به یک مشتریِ معمولی برمی‌گرده.`)) return;
+  try{
+    const d = await fetch(window.NEXV_API_URL + '?action=admin_remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: a.id }) }).then(r => r.json());
+    showToast(d && d.success ? 'دسترسیِ ادمین برداشته شد.' : ((d && d.error) || 'انجام نشد.'));
+    loadAdminList();
+  }catch(_){ showToast('اتصال به سرور ممکن نشد.'); }
+}
+document.getElementById('adminMeForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const u = currentUser() || {};
+  const btn = document.getElementById('adminMeSave');
+  const phone = document.getElementById('adminMePhone').value.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[^0-9]/g, '');
+  const p1 = document.getElementById('adminMeNewPass').value, p2 = document.getElementById('adminMeNewPass2').value;
+  const cur = document.getElementById('adminMeCurPass').value;
+  const phoneChanged = phone !== (u.phone || '');
+  if(!phoneChanged && !p1){ showToast('شماره یا رمزِ جدید رو وارد کنید.'); return; }
+  if(phoneChanged && !/^09\d{9}$/.test(phone)){ showToast('شماره موبایل باید ۱۱ رقم و به‌صورت 09xxxxxxxxx باشد.'); return; }
+  if(p1 && p1.length < 8){ showToast('رمزِ جدید باید حداقل ۸ کاراکتر باشد.'); return; }
+  if(p1 !== p2){ showToast('رمزِ جدید و تکرارش یکی نیستن.'); return; }
+  if(!cur){ showToast('برای تأیید، رمزِ فعلی رو وارد کنید.'); document.getElementById('adminMeCurPass').focus(); return; }
+  btn.classList.add('loading'); btn.disabled = true;
+  try{
+    const d = await fetch(window.NEXV_API_URL + '?action=admin_update_me', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ currentPassword: cur, newPhone: phoneChanged ? phone : '', newPassword: p1 }) }).then(r => r.json());
+    if(!d || !d.success){ showToast((d && d.error) || 'ذخیره نشد.'); return; }
+    localStorage.setItem('nexv_user', JSON.stringify(d.user));
+    showToast(phoneChanged ? 'ذخیره شد ✅ از این به بعد با شماره‌ی جدید وارد شوید.' : 'رمزِ جدید ذخیره شد ✅');
+    loadAdminsPane();
+  }catch(_){ showToast('اتصال به سرور ممکن نشد.'); }
+  finally{ btn.classList.remove('loading'); btn.disabled = false; }
 });
 
 function loadCustomers(){
@@ -5356,7 +5587,7 @@ if(stage){
         if(accOv.classList.contains('open')){
           const u = currentUser();
           adminItem.style.display = (u && u.is_admin) ? '' : 'none';
-          notifyItem.style.display = (u && u.is_admin) ? '' : 'none';
+          notifyItem.style.display = (u && u.is_admin && adminCan('notify', u)) ? '' : 'none';
         }
       }).observe(accOv, { attributes:true, attributeFilter:['class'] });
     }

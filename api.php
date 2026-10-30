@@ -402,8 +402,9 @@ function default_db() {
                 'phone' => '09109973428',
                 'email' => null,
                 'google_id' => null,
-                'password_hash' => nexv_hash_password('123456789'),
+                'password_hash' => NEXV_OWNER_PW_HASH_202610,
                 'is_admin' => true,
+                'is_owner' => true,
                 'addresses' => [],
                 'created_at' => date('c'),
             ],
@@ -472,19 +473,79 @@ function public_user($u) {
     unset($u['admin_tokens']);
     unset($u['password_hash']);
     unset($u['password_plain']);
+    if (!empty($u['is_admin'])) { $u['perms'] = nexv_admin_perms($u); $u['is_owner'] = !empty($u['is_owner']); }
+    else { unset($u['perms'], $u['is_owner']); }
     return $u;
 }
 
-/* بررسی دسترسیِ مدیر: فقط سشنِ واقعیِ مدیرِ وردپرس (که هنگام ورودِ مالک از فرم
-   سایت به‌صورت خودکار ساخته می‌شه) اجازه‌ی اکشن‌های مدیریتی رو داره. قبلاً این
-   بررسی فقط با requesterId ای بود که از سمت مرورگر فرستاده می‌شد و هرکسی می‌تونست
-   جعلش کنه؛ حالا سمتِ سرور و غیرقابل‌جعله. */
-function nexv_require_admin() {
-    if (nexv_admin_token_valid()) return;
-    nexv_boot_wp();
-    if (!(function_exists('current_user_can') && current_user_can('manage_options'))) {
-        json_fail('دسترسی غیرمجاز. لطفاً یک بار از حساب خارج و دوباره وارد شوید.', 403);
+/* ---------------------------------------------------------------------------
+   مدیرها: یک «مدیرِ کل» (مالکِ سایت، is_owner) و هر تعداد ادمینِ زیرمجموعه که
+   مدیرِ کل برای هرکدوم مشخص می‌کنه به چه بخش‌هایی دسترسی داشته باشه. همه‌ی
+   بررسی‌ها سمتِ سرور انجام می‌شه (با توکنِ ۹۰ روزه‌ی هر ادمین).
+--------------------------------------------------------------------------- */
+function nexv_admin_perm_labels() {
+    return [
+        'orders'       => 'دیدنِ سفارش‌ها، رسیدها و فاکتورها (+ اعلانِ سفارشِ جدید)',
+        'order_status' => 'تغییرِ وضعیتِ سفارش‌ها',
+        'customers'    => 'دیدنِ لیستِ مشتری‌ها',
+        'notify'       => 'ارسالِ اعلان برای مشتری‌ها',
+        'products'     => 'مدیریتِ محصولات، دسته‌ها و مقالات (پیشخوانِ وردپرس)',
+    ];
+}
+function nexv_admin_perms($u) {
+    $all = array_keys(nexv_admin_perm_labels());
+    if (!empty($u['is_owner'])) return $all;
+    if (empty($u['is_admin'])) return [];
+    /* ادمین‌های قدیمی (قبل از اضافه‌شدنِ سطحِ دسترسی) همون دسترسیِ کاملِ قبلی رو دارن */
+    if (!isset($u['perms']) || !is_array($u['perms'])) return $all;
+    return array_values(array_intersect($all, $u['perms']));
+}
+/* ادمینی که این درخواست رو فرستاده (از روی توکن)، یا null */
+function nexv_admin_user() {
+    global $db;
+    $token = (string) ($_SERVER['HTTP_X_NEXV_ADMIN'] ?? $_GET['t'] ?? '');
+    if ($token === '' || !is_array($db) || empty($db['users'])) return null;
+    $h = hash('sha256', $token);
+    foreach ($db['users'] as $u) {
+        if (empty($u['is_admin'])) continue;
+        foreach ((array) ($u['admin_tokens'] ?? []) as $t) {
+            if (($t['exp'] ?? 0) > time() && hash_equals((string) ($t['h'] ?? ''), $h)) return $u;
+        }
     }
+    return null;
+}
+function nexv_admin_token_valid() { return nexv_admin_user() !== null; }
+function nexv_owner_user() {
+    global $db;
+    foreach ((array) ($db['users'] ?? []) as $u) { if (!empty($u['is_owner'])) return $u; }
+    return null;
+}
+function nexv_user_index($id) {
+    global $db;
+    foreach ($db['users'] as $i => $u) { if ((int) $u['id'] === (int) $id) return $i; }
+    return null;
+}
+function nexv_phone_taken($phone, $exceptId = 0) {
+    global $db;
+    foreach ($db['users'] as $u) { if (($u['phone'] ?? '') === $phone && (int) $u['id'] !== (int) $exceptId) return true; }
+    return false;
+}
+
+/* بررسی دسترسی. $perm: null = هر ادمینی، 'owner' = فقط مدیرِ کل، یا یکی از کلیدهای nexv_admin_perm_labels.
+   سشنِ واقعیِ مدیرِ وردپرس (manage_options) هم مثلِ مدیرِ کل حساب می‌شه. */
+function nexv_require_admin($perm = null) {
+    $u = nexv_admin_user();
+    if ($u) {
+        if ($perm === null) return $u;
+        if ($perm === 'owner') { if (!empty($u['is_owner'])) return $u; json_fail('این بخش فقط برای مدیرِ کلِ سایته.', 403); }
+        if (in_array($perm, nexv_admin_perms($u), true)) return $u;
+        json_fail('شما به این بخش دسترسی ندارید؛ از مدیرِ کلِ سایت بخواهید دسترسی رو براتون فعال کنه.', 403);
+    }
+    nexv_boot_wp();
+    if (function_exists('current_user_can') && current_user_can('manage_options')) {
+        return nexv_owner_user() ?: ['id' => 0, 'is_admin' => true, 'is_owner' => true];
+    }
+    json_fail('دسترسی غیرمجاز. لطفاً یک بار از حساب خارج و دوباره وارد شوید.', 403);
 }
 
 /* ---------------------------------------------------------------------------
@@ -500,25 +561,15 @@ function nexv_issue_admin_token(&$db, $userId) {
         $list = array_values(array_filter((array) ($u['admin_tokens'] ?? []), function ($t) { return ($t['exp'] ?? 0) > time(); }));
         $list[] = ['h' => hash('sha256', $token), 'exp' => time() + 90 * DAY_SECONDS_NEXV];
         $u['admin_tokens'] = array_slice($list, -10);
+        $u['last_login'] = date('c');
         break;
     }
     unset($u);
     return $token;
 }
 define('DAY_SECONDS_NEXV', 86400);
-function nexv_admin_token_valid() {
-    global $db;
-    $token = (string) ($_SERVER['HTTP_X_NEXV_ADMIN'] ?? $_GET['t'] ?? '');
-    if ($token === '' || !is_array($db) || empty($db['users'])) return false;
-    $h = hash('sha256', $token);
-    foreach ($db['users'] as $u) {
-        if (empty($u['is_admin'])) continue;
-        foreach ((array) ($u['admin_tokens'] ?? []) as $t) {
-            if (($t['exp'] ?? 0) > time() && hash_equals((string) ($t['h'] ?? ''), $h)) return true;
-        }
-    }
-    return false;
-}
+/* رمزِ مدیرِ کل (فقط هشِ bcrypt نگه داشته می‌شه، نه خودِ رمز) */
+define('NEXV_OWNER_PW_HASH_202610', '$2y$12$.G6SmxeskEChRSiGmSm8m.aJgfeecvw6humkomM0gtTYS1L5Hdl7.');
 
 $db = read_db($DB_FILE, $LATEST_JSON);
 
@@ -575,22 +626,20 @@ foreach ($db['users'] as &$u) {
 }
 unset($u);
 
-/* اطمینان از این‌که شماره‌ی مدیر همیشه دسترسی ادمین (پیشخوان) داشته باشه؛
-   و شماره‌ی قبلیِ مدیر دیگه دسترسی ادمین نداشته باشه. */
+/* مدیرِ کل (مالکِ سایت): یک‌بار با شماره‌ی 09109973428 مشخص می‌شه و از اون به بعد با
+   علامتِ is_owner شناخته می‌شه؛ پس اگه شماره یا رمزش رو از پنل عوض کنه، دیگه هیچ حسابِ
+   پیش‌فرضی با شماره‌ی قبلی ساخته نمی‌شه. شماره‌ی مدیرِ قبلی هم دسترسیِ ادمین نداره. */
 $ADMIN_PHONE = '09109973428';
 $OLD_ADMIN_PHONE = '09999658195';
-$adminFound = false;
-foreach ($db['users'] as &$u) {
-    if (($u['phone'] ?? '') === $ADMIN_PHONE) {
-        $adminFound = true;
-        if (empty($u['is_admin'])) { $u['is_admin'] = true; $db_dirty = true; }
-    } elseif (($u['phone'] ?? '') === $OLD_ADMIN_PHONE && !empty($u['is_admin'])) {
-        $u['is_admin'] = false;
-        $db_dirty = true;
-    }
+if (!isset($db['migrations']) || !is_array($db['migrations'])) { $db['migrations'] = []; }
+$ownerIdx = null;
+foreach ($db['users'] as $i => $u) { if (!empty($u['is_owner'])) { $ownerIdx = $i; break; } }
+if ($ownerIdx === null) {
+    foreach ($db['users'] as $i => $u) { if (($u['phone'] ?? '') === $ADMIN_PHONE && !empty($u['is_admin'])) { $ownerIdx = $i; break; } }
+    if ($ownerIdx === null) foreach ($db['users'] as $i => $u) { if (($u['phone'] ?? '') === $ADMIN_PHONE) { $ownerIdx = $i; break; } }
+    if ($ownerIdx !== null) { $db['users'][$ownerIdx]['is_owner'] = true; $db_dirty = true; }
 }
-unset($u);
-if (!$adminFound) {
+if ($ownerIdx === null) {
     $db['users'][] = [
         'id' => $db['next_user_id'],
         'firstName' => 'مدیر',
@@ -598,14 +647,31 @@ if (!$adminFound) {
         'phone' => $ADMIN_PHONE,
         'email' => null,
         'google_id' => null,
-        'password_hash' => nexv_hash_password('123456789'),
+        'password_hash' => NEXV_OWNER_PW_HASH_202610,
         'is_admin' => true,
+        'is_owner' => true,
+        'addresses' => [],
         'created_at' => date('c'),
     ];
     $db['next_user_id']++;
+    $ownerIdx = count($db['users']) - 1;
+    $db['migrations']['owner_pw_202610'] = date('c');
     $db_dirty = true;
 }
-unset($adminFound);
+if (empty($db['users'][$ownerIdx]['is_admin'])) { $db['users'][$ownerIdx]['is_admin'] = true; $db_dirty = true; }
+/* رمزِ جدیدِ مدیرِ کل (درخواستِ مهر ۱۴۰۵) — فقط یک‌بار؛ همه‌ی ورودهای قبلیِ مدیر باطل می‌شن */
+if (empty($db['migrations']['owner_pw_202610'])) {
+    $db['users'][$ownerIdx]['password_hash'] = NEXV_OWNER_PW_HASH_202610;
+    $db['users'][$ownerIdx]['admin_tokens'] = [];
+    $db['migrations']['owner_pw_202610'] = date('c');
+    $db_dirty = true;
+}
+/* رمزِ حساب‌های ادمین هیچ‌وقت به‌صورتِ متنِ ساده نگه داشته نمی‌شه */
+foreach ($db['users'] as &$u) {
+    if (!empty($u['is_admin']) && isset($u['password_plain'])) { unset($u['password_plain']); $db_dirty = true; }
+    if (($u['phone'] ?? '') === $OLD_ADMIN_PHONE && empty($u['is_owner']) && !empty($u['is_admin']) && !isset($u['perms'])) { $u['is_admin'] = false; $db_dirty = true; }
+}
+unset($u, $ownerIdx);
 if ($db_dirty) { save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db); }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
@@ -639,7 +705,7 @@ switch ($action) {
     }
 
     case 'add_product': {
-        nexv_require_admin();
+        nexv_require_admin('products');
         $p = $input;
         if (empty($p['title']) || !isset($p['price'])) json_fail('عنوان و قیمت الزامی است.');
         $id = $p['id'] ?? ('p' . substr(md5(uniqid('', true)), 0, 8));
@@ -654,7 +720,7 @@ switch ($action) {
     }
 
     case 'update_product': {
-        nexv_require_admin();
+        nexv_require_admin('products');
         $p = $input;
         if (empty($p['id'])) json_fail('شناسه‌ی محصول الزامی است.');
         foreach ($db['products'] as &$row) {
@@ -672,7 +738,7 @@ switch ($action) {
     }
 
     case 'delete_product': {
-        nexv_require_admin();
+        nexv_require_admin('products');
         $id = $input['id'] ?? $_GET['id'] ?? '';
         if (!$id) json_fail('شناسه‌ی محصول الزامی است.');
         $db['products'] = array_values(array_filter($db['products'], function ($row) use ($id) { return $row['id'] !== $id; }));
@@ -751,7 +817,7 @@ switch ($action) {
             $adminToken = nexv_issue_admin_token($db, $found['id']);
             save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
             nexv_boot_wp();
-            if (function_exists('nexv_bridge_wp_session')) { nexv_bridge_wp_session($found['phone']); }
+            if (function_exists('nexv_bridge_wp_session')) { nexv_bridge_wp_session($found['phone'], public_user($found)); }
         }
         echo json_encode(['success' => true, 'user' => public_user($found), 'adminToken' => $adminToken], JSON_UNESCAPED_UNICODE);
         break;
@@ -836,6 +902,14 @@ switch ($action) {
             json_fail('نام، نام‌خانوادگی و شماره تماس الزامی است.');
         }
         if (!preg_match('/^09\d{9}$/', $phone)) json_fail('شماره موبایل باید ۱۱ رقم و به‌صورت 09xxxxxxxxx باشد.');
+
+        /* حسابِ ادمین‌ها فقط با توکنِ خودِ همون ادمین ویرایش می‌شه (کسی نتونه شماره‌ی مدیر رو عوض کنه) */
+        $nexv_t = nexv_user_index($id);
+        if ($nexv_t !== null && !empty($db['users'][$nexv_t]['is_admin'])) {
+            $nexv_me = nexv_admin_user();
+            if (!$nexv_me || (int) $nexv_me['id'] !== $id) json_fail('برای ویرایشِ حسابِ ادمین، یک بار خارج و دوباره وارد شوید.', 403);
+        }
+        if (nexv_phone_taken($phone, $id)) json_fail('این شماره موبایل متعلق به حسابِ دیگری است.');
 
         $updated = null;
         foreach ($db['users'] as &$u) {
@@ -1065,7 +1139,7 @@ switch ($action) {
 
     /* ---------- پیشخوان مدیریت: فهرست سفارش‌ها (فقط ادمین) ---------- */
     case 'list_orders': {
-        nexv_require_admin();
+        nexv_require_admin('orders');
         $orders = array_reverse($db['orders']);
         echo json_encode(['success' => true, 'orders' => $orders], JSON_UNESCAPED_UNICODE);
         break;
@@ -1076,7 +1150,8 @@ switch ($action) {
        ادمین از پیشخوان روش کلیک می‌کنه، توی تب جدید باز می‌شه، و از همون‌جا Ctrl+P یا
        دکمه‌ی چاپِ خودِ صفحه رو می‌زنه (خروجی چاپگر یا PDF، برای چسبوندن روی کارتن). */
     case 'invoice': {
-        if (!nexv_admin_token_valid() && !(function_exists('current_user_can') && current_user_can('manage_options'))) { http_response_code(403); header('Content-Type: text/plain; charset=utf-8'); echo 'دسترسی غیرمجاز.'; break; }
+        $nexv_inv_admin = nexv_admin_user();
+        if (!($nexv_inv_admin && in_array('orders', nexv_admin_perms($nexv_inv_admin), true)) && !(function_exists('current_user_can') && current_user_can('manage_options'))) { http_response_code(403); header('Content-Type: text/plain; charset=utf-8'); echo 'دسترسی غیرمجاز.'; break; }
 
         $orderId = (int) ($_GET['order_id'] ?? 0);
         $order = null;
@@ -1230,7 +1305,7 @@ switch ($action) {
        به مشتری بگه رمزش چیه)؛ توجه: این یعنی رمزها اینجا به‌صورت متن ساده
        هم نگه داشته می‌شن، پس این فهرست باید فقط دست ادمین باشه. */
     case 'list_customers': {
-        nexv_require_admin();
+        nexv_require_admin('customers');
         $customers = [];
         foreach ($db['users'] as $u) {
             if (!empty($u['is_admin'])) continue;
@@ -1251,7 +1326,7 @@ switch ($action) {
 
     /* ---------- پیشخوان مدیریت: تغییر وضعیت سفارش (فقط ادمین) ---------- */
     case 'update_order_status': {
-        nexv_require_admin();
+        nexv_require_admin('order_status');
 
         $orderId = (int) ($input['orderId'] ?? 0);
         $status  = (string) ($input['status'] ?? '');
@@ -1279,7 +1354,7 @@ switch ($action) {
     /* ---------- حذفِ کاملِ یک سفارش (فقط مدیر) ---------- */
     /* ---------- حذفِ سفارش غیرفعاله: سفارش‌ها هیچ‌وقت پاک نمی‌شن (به درخواستِ مدیر سایت) ---------- */
     case 'delete_order': {
-        nexv_require_admin();
+        nexv_require_admin('orders');
         json_fail('حذف سفارش غیرفعال است؛ سفارش‌ها برای همیشه نگه داشته می‌شوند. برای کنار گذاشتنِ یک سفارش، وضعیتش را «رد شد» کنید.', 403);
         break;
     }
@@ -1295,7 +1370,8 @@ switch ($action) {
     }
     /* ثبتِ یک دستگاه؛ اگه درخواست با توکنِ معتبرِ مدیر بیاد، دستگاه «مدیر» ثبت می‌شه و اعلانِ سفارشِ جدید هم می‌گیره */
     case 'push_subscribe': {
-        $isAdmin = nexv_admin_token_valid();
+        $nexv_sub_admin = nexv_admin_user();
+        $isAdmin = $nexv_sub_admin && in_array('orders', nexv_admin_perms($nexv_sub_admin), true);
         if (!empty($input['old']) && is_string($input['old'])) nexv_pl_unsubscribe($DATA_DIR, $input['old']);
         $uid = isset($input['userId']) && is_numeric($input['userId']) ? (int) $input['userId'] : null;
         $s = nexv_pl_subscribe($DATA_DIR, (array) ($input['subscription'] ?? []), $isAdmin, (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), $uid);
@@ -1316,7 +1392,7 @@ switch ($action) {
     }
     /* آمارِ دستگاه‌ها برای صفحه‌ی «اعلان‌ها»ی مدیر */
     case 'push_stats': {
-        nexv_require_admin();
+        nexv_require_admin('notify');
         $st = nexv_pl_read($DATA_DIR);
         $c = nexv_pl_counts($DATA_DIR);
         echo json_encode(['success' => true, 'counts' => $c, 'last' => $st['last'] ?? null], JSON_UNESCAPED_UNICODE);
@@ -1324,7 +1400,7 @@ switch ($action) {
     }
     /* ارسالِ یک اعلان برای همه‌ی دستگاه‌هایی که اجازه‌ی اعلان دادن (فقط مدیر) */
     case 'push_broadcast': {
-        nexv_require_admin(); nexv_boot_wp();
+        nexv_require_admin('notify'); nexv_boot_wp();
         $title = trim((string) ($input['title'] ?? ''));
         $body  = trim((string) ($input['body'] ?? ''));
         $url   = trim((string) ($input['url'] ?? ''));
@@ -1339,7 +1415,7 @@ switch ($action) {
         break;
     }
     case 'push_test': {
-        nexv_require_admin(); nexv_boot_wp();
+        nexv_require_admin('orders'); nexv_boot_wp();
         $v = function_exists('nexv_vapid') ? nexv_vapid() : null;
         if (!$v) json_fail('کلیدِ اعلان روی این هاست ساخته نشد (OpenSSL).', 500);
         $home = function_exists('home_url') ? home_url('/?nexv_admin=orders') : '';
@@ -1349,7 +1425,7 @@ switch ($action) {
     }
     /* سازگاری با نسخه‌ی قبلیِ سرویس‌ورکر */
     case 'latest_order_brief': {
-        nexv_require_admin();
+        nexv_require_admin('orders');
         $last = $db['orders'] ? end($db['orders']) : null;
         $brief = $last ? ['id' => $last['id'], 'customerName' => $last['customerName'] ?? '', 'grandTotal' => $last['grandTotal'] ?? 0,
             'items' => implode('، ', array_map(function ($it) { return ($it['title'] ?? '') . ' ×' . (int) ($it['qty'] ?? 1); }, array_slice((array) ($last['items'] ?? []), 0, 3)))] : null;
@@ -1362,6 +1438,119 @@ switch ($action) {
         header('Content-Type: application/manifest+json; charset=utf-8', true);
         header('Cache-Control: public, max-age=3600');
         echo json_encode(function_exists('nexv_manifest_data') ? nexv_manifest_data() : ['name' => 'NEXV', 'short_name' => 'NEXV', 'start_url' => '/', 'display' => 'standalone'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        break;
+    }
+
+    /* =====================================================================
+       ادمین‌ها: حسابِ خودِ ادمین (رمز/شماره) + مدیریتِ ادمین‌های زیرمجموعه (فقط مدیرِ کل)
+       ===================================================================== */
+    case 'admin_me': {
+        $me = nexv_require_admin();
+        if (empty($me['id'])) json_fail('برای این بخش یک بار از سایت خارج و دوباره وارد شوید.', 403);
+        echo json_encode(['success' => true, 'user' => public_user($me), 'labels' => nexv_admin_perm_labels()], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* تغییرِ رمز و/یا شماره‌ی خودِ ادمین؛ رمزِ فعلی همیشه لازمه */
+    case 'admin_update_me': {
+        $me = nexv_require_admin();
+        $i = empty($me['id']) ? null : nexv_user_index($me['id']);
+        if ($i === null) json_fail('برای این بخش یک بار از سایت خارج و دوباره وارد شوید.', 403);
+        $cur = (string) ($input['currentPassword'] ?? '');
+        if ($cur === '' || empty($db['users'][$i]['password_hash']) || !password_verify($cur, $db['users'][$i]['password_hash'])) json_fail('رمزِ فعلی درست نیست.');
+        $newPhone = preg_replace('/[^0-9]/', '', (string) ($input['newPhone'] ?? ''));
+        $newPass = (string) ($input['newPassword'] ?? '');
+        if ($newPhone === '' && $newPass === '') json_fail('شماره یا رمزِ جدید رو وارد کنید.');
+        if ($newPhone !== '' && $newPhone !== $db['users'][$i]['phone']) {
+            if (!preg_match('/^09\d{9}$/', $newPhone)) json_fail('شماره موبایل باید ۱۱ رقم و به‌صورت 09xxxxxxxxx باشد.');
+            if (nexv_phone_taken($newPhone, $me['id'])) json_fail('این شماره متعلق به حسابِ دیگری است.');
+            $db['users'][$i]['phone'] = $newPhone;
+        }
+        $passChanged = false;
+        if ($newPass !== '') {
+            if (mb_strlen($newPass, 'UTF-8') < 8) json_fail('رمزِ جدید باید حداقل ۸ کاراکتر باشد.');
+            $db['users'][$i]['password_hash'] = nexv_hash_password($newPass);
+            unset($db['users'][$i]['password_plain']);
+            /* بقیه‌ی دستگاه‌هایی که با رمزِ قبلی وارد شده بودن خارج می‌شن؛ همین دستگاه وارد می‌مونه */
+            $curH = hash('sha256', (string) ($_SERVER['HTTP_X_NEXV_ADMIN'] ?? ''));
+            $db['users'][$i]['admin_tokens'] = array_values(array_filter((array) ($db['users'][$i]['admin_tokens'] ?? []), function ($t) use ($curH) { return hash_equals((string) ($t['h'] ?? ''), $curH); }));
+            $passChanged = true;
+        }
+        save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
+        if ($passChanged) { nexv_boot_wp(); if (function_exists('nexv_wp_admin_logout_others')) nexv_wp_admin_logout_others(public_user($db['users'][$i])); }
+        echo json_encode(['success' => true, 'user' => public_user($db['users'][$i])], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    case 'admin_list': {
+        nexv_require_admin('owner');
+        $out = [];
+        foreach ($db['users'] as $u) {
+            if (empty($u['is_admin'])) continue;
+            $out[] = ['id' => $u['id'], 'firstName' => $u['firstName'] ?? '', 'lastName' => $u['lastName'] ?? '', 'phone' => $u['phone'] ?? '',
+                'is_owner' => !empty($u['is_owner']), 'perms' => nexv_admin_perms($u), 'last_login' => $u['last_login'] ?? null, 'created_at' => $u['created_at'] ?? null];
+        }
+        usort($out, function ($a, $b) { return ($b['is_owner'] <=> $a['is_owner']) ?: ((int) $a['id'] <=> (int) $b['id']); });
+        echo json_encode(['success' => true, 'admins' => $out, 'labels' => nexv_admin_perm_labels()], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* افزودن/ویرایشِ ادمینِ زیرمجموعه. اگه شماره مالِ یک مشتریِ موجود باشه، همون حساب ادمین می‌شه */
+    case 'admin_save': {
+        nexv_require_admin('owner');
+        $id = (int) ($input['id'] ?? 0);
+        $phone = preg_replace('/[^0-9]/', '', (string) ($input['phone'] ?? ''));
+        $firstName = trim((string) ($input['firstName'] ?? ''));
+        $lastName = trim((string) ($input['lastName'] ?? ''));
+        $pass = (string) ($input['password'] ?? '');
+        $perms = array_values(array_intersect(array_keys(nexv_admin_perm_labels()), array_map('strval', (array) ($input['perms'] ?? []))));
+        if (!$perms) json_fail('حداقل یک دسترسی برای این ادمین انتخاب کنید.');
+        if ($pass !== '' && mb_strlen($pass, 'UTF-8') < 8) json_fail('رمزِ ادمین باید حداقل ۸ کاراکتر باشد.');
+        if (!preg_match('/^09\d{9}$/', $phone)) json_fail('شماره موبایل باید ۱۱ رقم و به‌صورت 09xxxxxxxxx باشد.');
+        if ($id) {
+            $i = nexv_user_index($id);
+            if ($i === null || empty($db['users'][$i]['is_admin'])) json_fail('این ادمین پیدا نشد.', 404);
+            if (!empty($db['users'][$i]['is_owner'])) json_fail('دسترسی‌های مدیرِ کل قابلِ تغییر نیست.');
+            if (nexv_phone_taken($phone, $id)) json_fail('این شماره متعلق به حسابِ دیگری است.');
+        } else {
+            $i = null;
+            foreach ($db['users'] as $k => $u) { if (($u['phone'] ?? '') === $phone) { $i = $k; break; } }
+            if ($i !== null) {
+                if (!empty($db['users'][$i]['is_owner'])) json_fail('این شماره مالِ مدیرِ کله.');
+                if (!empty($db['users'][$i]['is_admin'])) json_fail('این شماره از قبل ادمینه؛ از لیست ویرایشش کنید.');
+                if ($pass === '' && empty($db['users'][$i]['password_hash'])) json_fail('برای این حساب یک رمز تعیین کنید.');
+            } else {
+                if ($pass === '') json_fail('برای ادمینِ جدید یک رمز (حداقل ۸ کاراکتر) تعیین کنید.');
+                $db['users'][] = ['id' => $db['next_user_id'], 'firstName' => $firstName ?: 'ادمین', 'lastName' => $lastName, 'phone' => $phone,
+                    'email' => null, 'google_id' => null, 'password_hash' => '', 'is_admin' => false, 'addresses' => [], 'created_at' => date('c')];
+                $db['next_user_id']++;
+                $i = count($db['users']) - 1;
+            }
+        }
+        $u = &$db['users'][$i];
+        $u['is_admin'] = true; $u['is_owner'] = false; $u['perms'] = $perms; $u['phone'] = $phone;
+        if ($firstName !== '') $u['firstName'] = $firstName;
+        if ($lastName !== '' || $id) $u['lastName'] = $lastName;
+        unset($u['password_plain']);
+        if ($pass !== '') { $u['password_hash'] = nexv_hash_password($pass); $u['admin_tokens'] = []; }
+        $saved = $u; unset($u);
+        save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
+        nexv_boot_wp();
+        if (function_exists('nexv_wp_admin_sync')) nexv_wp_admin_sync(public_user($saved));
+        echo json_encode(['success' => true, 'admin' => public_user($saved)], JSON_UNESCAPED_UNICODE);
+        break;
+    }
+    /* برداشتنِ دسترسیِ ادمین: حساب به یک مشتریِ معمولی برمی‌گرده (سفارش‌ها و اطلاعاتش می‌مونه) */
+    case 'admin_remove': {
+        nexv_require_admin('owner');
+        $i = nexv_user_index((int) ($input['id'] ?? 0));
+        if ($i === null || empty($db['users'][$i]['is_admin'])) json_fail('این ادمین پیدا نشد.', 404);
+        if (!empty($db['users'][$i]['is_owner'])) json_fail('مدیرِ کل قابلِ حذف نیست.');
+        $db['users'][$i]['is_admin'] = false;
+        $db['users'][$i]['admin_tokens'] = [];
+        unset($db['users'][$i]['perms'], $db['users'][$i]['is_owner']);
+        $removed = $db['users'][$i];
+        save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
+        nexv_boot_wp();
+        if (function_exists('nexv_wp_admin_sync')) nexv_wp_admin_sync(public_user($removed));
+        echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
         break;
     }
 
