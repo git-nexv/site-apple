@@ -240,14 +240,15 @@ const SELF = new URL(self.location.href);
 const THEME = SELF.pathname.indexOf('/wp-content/') !== -1 ? SELF.origin + SELF.pathname.replace(/[^\/]*$/, '') : '';
 const HOME = SELF.origin + (SELF.pathname.indexOf('/wp-content/') !== -1 ? SELF.pathname.replace(/wp-content\/.*$/, '') : SELF.pathname.replace(/[^\/]*$/, ''));
 const API = THEME ? THEME + 'api.php' : (SELF.searchParams.get('api') || '');
-const ICON = THEME ? THEME + 'logo.png' : (SELF.searchParams.get('icon') || '');
+const ICON = THEME ? THEME + 'icons/icon-192.png' : (SELF.searchParams.get('icon') || '');
+const BADGE = THEME ? THEME + 'icons/badge-96.png' : (SELF.searchParams.get('badge') || ICON);
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 function show(m){
   m = m || {};
   const url = m.url ? new URL(m.url, HOME).href : HOME;
   return self.registration.showNotification(m.title || 'NEXV', {
-    body: m.body || '', icon: ICON || undefined, badge: ICON || undefined, tag: m.tag || ('nexv-' + Date.now()), renotify: true,
+    body: m.body || '', icon: ICON || undefined, badge: BADGE || undefined, tag: m.tag || ('nexv-' + Date.now()), renotify: true,
     dir: 'rtl', lang: 'fa', data: { url }
   });
 }

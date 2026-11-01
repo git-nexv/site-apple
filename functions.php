@@ -3033,11 +3033,65 @@ add_action('admin_init', function () {
 /* =========================================================================
  * لوگوی سایت (logo.png در پوشه‌ی قالب) — برای صفحه‌های مستقل و آیکونِ تب
  * ========================================================================= */
-function nexv_logo_url() { return get_template_directory_uri() . '/logo.png'; }
-function nexv_favicon_tags() {
-    $u = esc_url(nexv_logo_url());
-    return '<link rel="icon" type="image/png" href="' . $u . '"><link rel="apple-touch-icon" href="' . $u . '">';
+define('NEXV_ICON_VER', '20261101');
+/* آیکون‌های سایت در پوشه‌ی icons قالب (از نسخه‌ی ۴۰۹۶ پیکسلی، با کیفیتِ کامل کوچیک شدن) */
+function nexv_icon_url($file) { return get_template_directory_uri() . '/icons/' . $file . '?v=' . NEXV_ICON_VER; }
+function nexv_logo_url() { return get_template_directory_uri() . '/logo.png?v=' . NEXV_ICON_VER; }
+/* اگه بعداً از پیشخوان یک «نماد سایت» دیگه انتخاب بشه، همون استفاده می‌شه؛ وگرنه آیکون‌های قالب */
+function nexv_use_theme_icons() {
+    return !(function_exists('has_site_icon') && has_site_icon()) || (int) get_option('site_icon') === (int) get_option('nexv_site_icon_id');
 }
+function nexv_favicon_tags() {
+    if (!nexv_use_theme_icons()) {
+        $v = '?v=' . (int) get_option('site_icon');
+        return '<link rel="icon" href="' . esc_url(get_site_icon_url(32) . $v) . '" sizes="32x32">'
+             . '<link rel="icon" href="' . esc_url(get_site_icon_url(192) . $v) . '" sizes="192x192">'
+             . '<link rel="apple-touch-icon" href="' . esc_url(get_site_icon_url(180) . $v) . '">';
+    }
+    $t = '';
+    foreach ([16, 32, 48, 96, 192] as $px) {
+        $t .= '<link rel="icon" type="image/png" sizes="' . $px . 'x' . $px . '" href="' . esc_url(nexv_icon_url('icon-' . $px . '.png')) . '">';
+    }
+    $t .= '<link rel="shortcut icon" href="' . esc_url(nexv_icon_url('favicon.ico')) . '">';
+    $t .= '<link rel="apple-touch-icon" sizes="180x180" href="' . esc_url(nexv_icon_url('apple-touch-icon.png')) . '">';
+    return $t;
+}
+/* «نماد سایت» وردپرس (آیکونِ تبِ پیشخوان، صفحه‌ی ورود، /favicon.ico) یک‌بار با آیکونِ جدید عوض می‌شه.
+   اندازه‌ها از قبل با کیفیتِ بالا ساخته شدن و مستقیم استفاده می‌شن (وردپرس دوباره کوچیکشون نمی‌کنه). */
+add_action('admin_init', function () {
+    if (get_option('nexv_site_icon_v') === NEXV_ICON_VER || !current_user_can('manage_options')) return;
+    $src = get_template_directory() . '/icons';
+    if (!file_exists($src . '/icon-512.png')) return;
+    $up = wp_upload_dir();
+    if (!empty($up['error']) || !wp_mkdir_p($up['path'])) return;
+    $base = 'nexv-site-icon-' . NEXV_ICON_VER;
+    $files = ['' => 'icon-512.png', '-32x32' => 'icon-32.png', '-180x180' => 'apple-touch-icon.png', '-192x192' => 'icon-192.png', '-270x270' => 'icon-270.png'];
+    foreach ($files as $suffix => $f) { if (!@copy($src . '/' . $f, trailingslashit($up['path']) . $base . $suffix . '.png')) return; }
+    $old_icon = (int) get_option('site_icon');
+    $id = wp_insert_attachment([
+        'post_title' => 'NEXV — نماد سایت', 'post_mime_type' => 'image/png', 'post_status' => 'inherit',
+        'guid' => trailingslashit($up['url']) . $base . '.png',
+    ], trailingslashit($up['path']) . $base . '.png');
+    if (!$id || is_wp_error($id)) return;
+    $sizes = [];
+    foreach ([32, 180, 192, 270] as $px) $sizes['site_icon-' . $px] = ['file' => $base . '-' . $px . 'x' . $px . '.png', 'width' => $px, 'height' => $px, 'mime-type' => 'image/png'];
+    wp_update_attachment_metadata($id, ['width' => 512, 'height' => 512, 'file' => ltrim(trailingslashit($up['subdir']), '/') . $base . '.png', 'sizes' => $sizes, 'image_meta' => []]);
+    update_post_meta($id, '_wp_attachment_context', 'site-icon');
+    update_option('site_icon', $id);
+    update_option('nexv_site_icon_id', $id, false);
+    update_option('nexv_site_icon_v', NEXV_ICON_VER, false);
+    /* لوگوی سازمان در Rank Math (اسکیمای گوگل) اگه خالی یا همون آیکونِ قبلی بود، اون هم به‌روز می‌شه */
+    $rm = get_option('rank-math-options-titles');
+    if (is_array($rm)) {
+        $cur_url = (string) ($rm['knowledgegraph_logo'] ?? '');
+        $cur_id = (int) ($rm['knowledgegraph_logo_id'] ?? 0);
+        if ($cur_url === '' || ($old_icon && $cur_id === $old_icon) || preg_match('#/themes/[^/]+/logo\.png#', $cur_url)) {
+            $rm['knowledgegraph_logo'] = wp_get_attachment_url($id);
+            $rm['knowledgegraph_logo_id'] = $id;
+            update_option('rank-math-options-titles', $rm);
+        }
+    }
+});
 /* اگه در وردپرس «نماد سایت» تنظیم نشده، همین لوگو آیکونِ تب و گوگل می‌شه */
 add_action('wp_head', function () { if (!has_site_icon()) echo nexv_favicon_tags(); }, 2);
 
@@ -3936,12 +3990,16 @@ add_action('admin_init', function () {
     delete_option('nexv_push_subs'); delete_option('nexv_push_last'); delete_option('nexv_push_test_until');
 });
 function nexv_manifest_data() {
-    $logo = get_template_directory_uri() . '/logo.png';
     return [
         'name' => 'NEXV — فروشگاه قطعات اپل', 'short_name' => 'NEXV', 'lang' => 'fa', 'dir' => 'rtl', 'id' => home_url('/'),
         'start_url' => home_url('/?source=pwa'), 'scope' => home_url('/'), 'display' => 'standalone',
         'background_color' => '#f3f1f9', 'theme_color' => '#6a4dff',
-        'icons' => [['src' => $logo, 'sizes' => '300x300', 'type' => 'image/png', 'purpose' => 'any'], ['src' => $logo, 'sizes' => '192x192', 'type' => 'image/png'], ['src' => $logo, 'sizes' => '512x512', 'type' => 'image/png']],
+        'icons' => [
+            ['src' => nexv_icon_url('icon-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => nexv_icon_url('icon-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => nexv_icon_url('icon-maskable-192.png'), 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'maskable'],
+            ['src' => nexv_icon_url('icon-maskable-512.png'), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'maskable'],
+        ],
     ];
 }
 

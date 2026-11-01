@@ -4434,7 +4434,7 @@ const NEXV_SW_SCOPE = new URL(HOME_URL, location.origin).pathname;
 const NEXV_SW_URLS = (function(){
   const api = new URL(new URL(window.NEXV_API_URL || 'api.php', location.href).pathname, location.origin);
   const root = new URL(NEXV_SW_SCOPE, location.origin);
-  root.searchParams.set('nexv_sw', '2'); root.searchParams.set('api', api.href); root.searchParams.set('icon', new URL('logo.png', api).href);
+  root.searchParams.set('nexv_sw', '2'); root.searchParams.set('api', api.href); root.searchParams.set('icon', new URL('icons/icon-192.png', api).href); root.searchParams.set('badge', new URL('icons/badge-96.png', api).href);
   return [api.href + '?action=sw', root.href];
 })();
 const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
@@ -5580,7 +5580,7 @@ if(stage){
     notifyItem.addEventListener('click', ()=> showAccountPane('notify'));
     accMenu.insertBefore(notifyItem, adminItem.nextSibling);
     const prevIc = document.getElementById('notifyPrevIcon');
-    if(prevIc){ try{ prevIc.src = new URL('logo.png', new URL(window.NEXV_API_URL, location.href)).href; }catch(_){} }
+    if(prevIc){ try{ prevIc.src = new URL('icons/icon-192.png', new URL(window.NEXV_API_URL, location.href)).href; }catch(_){} }
     const accOv = document.getElementById('accountOverlay');
     if(accOv){
       new MutationObserver(()=>{

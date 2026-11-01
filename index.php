@@ -239,7 +239,7 @@ if (function_exists('is_page') && is_page('terms')) {
     </head>
     <body>
         <div class="terms-box">
-            <img class="terms-logo" src="<?php echo esc_url(nexv_logo_url()); ?>" alt="NEXV">
+            <img class="terms-logo" src="<?php echo esc_url(nexv_icon_url('icon-192.png')); ?>" alt="NEXV" width="52" height="52">
             <h1>قوانین و مقررات</h1>
             <p class="tagline">شرایط خرید از فروشگاه NEXV — لطفاً پیش از ثبت سفارش بخوانید</p>
             <?php $i = 0; foreach ($rules as $rule) : $i++; ?>
@@ -311,7 +311,7 @@ if (function_exists('is_page') && is_page('about')) {
     </head>
     <body>
         <div class="about-box">
-            <img class="about-logo" src="<?php echo esc_url(nexv_logo_url()); ?>" alt="NEXV">
+            <img class="about-logo" src="<?php echo esc_url(nexv_icon_url('icon-192.png')); ?>" alt="NEXV" width="56" height="56">
             <h1>NEXV</h1>
             <p class="tagline">فروشگاه تخصصی محصولات و قطعات اورجینال اپل</p>
 
@@ -344,10 +344,8 @@ if (function_exists('is_page') && is_page('about')) {
 
 
 $html    = file_get_contents(__DIR__ . '/site.html');
-/* آیکونِ تب: «نماد سایت» وردپرس اگه تنظیم شده، وگرنه logo.png قالب */
-$nexv_icon_tags = (function_exists('has_site_icon') && has_site_icon())
-    ? '<link rel="icon" href="' . esc_url(get_site_icon_url(192)) . '"><link rel="apple-touch-icon" href="' . esc_url(get_site_icon_url(180)) . '">'
-    : nexv_favicon_tags();
+/* آیکونِ تب و آیکونِ صفحه‌ی گوشی (همه‌ی اندازه‌ها؛ نگاه کن به nexv_favicon_tags) */
+$nexv_icon_tags = nexv_favicon_tags();
 /* PWA: نصب روی صفحه‌ی اصلیِ گوشی (برای اعلانِ سفارشِ جدید روی آیفون لازمه) */
 $nexv_icon_tags .= '<link rel="manifest" href="' . esc_url(get_template_directory_uri() . '/api.php?action=manifest') . '">'
     . '<meta name="theme-color" content="#6a4dff"><meta name="apple-mobile-web-app-capable" content="yes">'
@@ -554,23 +552,6 @@ if ($cat_seo_desc !== '') {
     $inject .= '<meta name="description" content="' . esc_attr(wp_trim_words($cat_seo_desc, 30, '...')) . '">';
 }
 $inject .= $topbar_style;
-
-/* ---------- فاویکون (آیکون تب مرورگر) ----------
-   وردپرس فاویکون رو فقط از طریق هوک wp_head() چاپ می‌کنه؛ چون این قالب
-   کاملاً سفارشیه و wp_head() رو صدا نمی‌زنه، با اینکه از پیشخوان ← شخصی‌سازی
-   ← «آیکون سایت» یک تصویر انتخاب بشه، هیچ‌وقت توی <head> درج نمی‌شد و برای
-   مشتری‌ها نمایش داده نمی‌شد. اینجا مستقیم خودمون تگ‌هاش رو می‌سازیم. */
-if (function_exists('has_site_icon') && has_site_icon()) {
-    $icon_id  = get_option('site_icon');
-    $ver      = $icon_id ? '?v=' . $icon_id : ''; // با عوض شدنِ آیکون، آدرس هم عوض می‌شه تا کش مرورگر گیر نکنه
-    $icon32   = get_site_icon_url(32);
-    $icon180  = get_site_icon_url(180);
-    $icon192  = get_site_icon_url(192);
-    if ($icon32) $inject .= '<link rel="icon" href="' . esc_url($icon32 . $ver) . '" sizes="32x32">';
-    if ($icon192) $inject .= '<link rel="icon" href="' . esc_url($icon192 . $ver) . '" sizes="192x192">';
-    if ($icon180) $inject .= '<link rel="apple-touch-icon" href="' . esc_url($icon180 . $ver) . '">';
-    if ($icon32) $inject .= '<link rel="shortcut icon" href="' . esc_url($icon32 . $ver) . '">';
-}
 
 /* ---------- سئوی صفحه‌های اپلیکیشنِ اصلی (صفحه‌ی اصلی، محصول، دسته) ----------
    این قالب wp_head() رو صدا نمی‌زنه، برای همین تا الان توضیحات متا، canonical، تگ‌های
