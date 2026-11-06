@@ -1,6 +1,12 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 
+/* بکاپِ کامل (پیشخوان ← بکاپ) و بازگردانی روی هاستِ جدید */
+require_once __DIR__ . '/backup.php';
+/* وقتی این قالب یک بکاپِ کامل همراهشه و هنوز بازگردانی نشده، کارهای خودکارِ قالب در پیشخوان
+   (درون‌ریزیِ محصولات، اصلاحیه‌ها و ...) اجرا نمی‌شن تا روی وردپرسِ تازه کاری انجام نشه */
+if (nexv_restore_pending() && is_admin()) { return; }
+
 /**
  * این پوسته به هیچ افزونه‌ای (از جمله ووکامرس) وابسته نیست.
  * صفحه‌ی اصلی (site.html) برای تمام آدرس‌های سایت بارگذاری می‌شه؛
@@ -54,16 +60,20 @@ add_action('admin_bar_menu', function ($wp_admin_bar) {
 /* شماره‌ای که با ورود از فرم سایت (نه پیشخوان)، به‌صورت خودکار هم یک سشن واقعی
    وردپرس (با نقش مدیر کل) براش ساخته/باز می‌شه تا نوار پیشخوان رو ببینه. */
 define('NEXV_OWNER_PHONE', '09109973428');
+/* حسابِ وردپرسیِ مدیرِ کل: نام کاربری = شماره‌ی مدیر، رمز = همون رمزِ ورودِ سایت (فقط هشِ bcrypt) */
+define('NEXV_OWNER_WP_LOGIN', '09109973428');
+define('NEXV_OWNER_WP_PW_HASH_202611', '$2y$12$uuhBdRCW760gjppESbIxE.S8iiLo3qDzpq.a6GOajlE8tNRUbi6ii');
 
 /* $user: حسابِ NEXV (خروجیِ public_user در api.php). مدیرِ کل → حسابِ «nexv-owner» با نقشِ
    مدیر کل وردپرس؛ ادمینِ زیرمجموعه با دسترسیِ «محصولات» → حسابِ جدا با نقشِ «ویرایشگر»
    (فقط محصولات/دسته‌ها/مقالات؛ نه تنظیمات، افزونه‌ها یا به‌روزرسانیِ قالب). بقیه سشنِ وردپرس نمی‌گیرن. */
 function nexv_wp_user_for_admin($user, $create = false) {
     if (!empty($user['is_owner'])) {
-        $wp_user = get_user_by('login', 'nexv-owner') ?: get_user_by('email', 'owner@nexv.local');
+        $login = get_option('nexv_owner_wp_login') ?: NEXV_OWNER_WP_LOGIN;
+        $wp_user = get_user_by('login', $login) ?: get_user_by('login', 'nexv-owner') ?: get_user_by('email', 'owner@nexv.local');
         if (!$wp_user && $create) {
             $new_id = wp_insert_user([
-                'user_login'   => 'nexv-owner',
+                'user_login'   => $login,
                 'user_pass'    => wp_generate_password(24, true, true),
                 'user_email'   => 'owner@nexv.local',
                 'display_name' => 'مدیر NEXV',
@@ -125,12 +135,52 @@ function nexv_bridge_wp_session($phone, $user = null) {
         wp_set_auth_cookie($wp_user->ID, true);
     }
 }
+/* یک‌بار: حسابِ وردپرسیِ مدیرِ کل با نام کاربریِ 09109973428 و رمزِ جدید (درخواستِ آبان ۱۴۰۵).
+   حسابِ قبلیِ «nexv-owner» (همونی که ورود از سایت بهش وصل می‌شد) فقط تغییرِ نام می‌ده؛ حسابِ جدیدی ساخته نمی‌شه. */
+add_action('init', function () {
+    if (get_option('nexv_owner_wp_login_v1')) return;
+    global $wpdb;
+    update_option('nexv_owner_wp_login_v1', time(), false);
+    $u = get_user_by('login', NEXV_OWNER_WP_LOGIN);
+    if (!$u) {
+        $old = get_user_by('login', 'nexv-owner') ?: get_user_by('email', 'owner@nexv.local');
+        if ($old) {
+            $wpdb->update($wpdb->users, ['user_login' => NEXV_OWNER_WP_LOGIN, 'user_nicename' => NEXV_OWNER_WP_LOGIN], ['ID' => $old->ID]);
+            clean_user_cache($old->ID);
+            $u = get_user_by('id', $old->ID);
+        } else {
+            $id = wp_insert_user(['user_login' => NEXV_OWNER_WP_LOGIN, 'user_pass' => wp_generate_password(24, true, true), 'user_email' => 'owner@nexv.local', 'display_name' => 'مدیر NEXV', 'role' => 'administrator']);
+            $u = is_wp_error($id) ? null : get_user_by('id', $id);
+        }
+    }
+    if (!$u) return;
+    if (!in_array('administrator', (array) $u->roles, true)) $u->set_role('administrator');
+    $wpdb->update($wpdb->users, ['user_pass' => NEXV_OWNER_WP_PW_HASH_202611, 'user_activation_key' => ''], ['ID' => $u->ID]);
+    clean_user_cache($u->ID);
+    update_option('nexv_owner_wp_login', NEXV_OWNER_WP_LOGIN, false);
+}, 5);
+/* وقتی مدیرِ کل از پنلِ سایت شماره یا رمزش رو عوض می‌کنه، حسابِ وردپرسش هم همون می‌شه */
+function nexv_wp_owner_sync($user, $newPass = '') {
+    if (empty($user['is_owner'])) return;
+    $wp_user = nexv_wp_user_for_admin($user, true);
+    if (!$wp_user) return;
+    global $wpdb;
+    $stay = get_current_user_id() === (int) $wp_user->ID;
+    $phone = preg_replace('/[^0-9]/', '', (string) ($user['phone'] ?? ''));
+    if ($phone !== '' && $phone !== $wp_user->user_login && !username_exists($phone)) {
+        $wpdb->update($wpdb->users, ['user_login' => $phone, 'user_nicename' => $phone], ['ID' => $wp_user->ID]);
+        update_option('nexv_owner_wp_login', $phone, false);
+        clean_user_cache($wp_user->ID);
+    }
+    if ($newPass !== '') wp_set_password($newPass, $wp_user->ID);
+    if ($stay) { wp_clear_auth_cookie(); wp_set_current_user($wp_user->ID); wp_set_auth_cookie($wp_user->ID, true); }   // همین مرورگر وارد بمونه
+}
 /* رمزِ مدیرِ کل عوض شد (مهر ۱۴۰۵): یک‌بار همه‌ی سشن‌های قبلیِ پیشخوانِ مدیر بسته می‌شن،
    به‌جز سشنِ همین مرورگری که الان داره قالب رو به‌روزرسانی می‌کنه */
 add_action('init', function () {
     if (get_option('nexv_owner_sessions_reset_202610')) return;
     update_option('nexv_owner_sessions_reset_202610', time(), false);
-    $wp_user = get_user_by('login', 'nexv-owner');
+    $wp_user = nexv_wp_user_for_admin(['is_owner' => true]);
     if (!$wp_user || !class_exists('WP_Session_Tokens')) return;
     $mgr = WP_Session_Tokens::get_instance($wp_user->ID);
     if (get_current_user_id() === (int) $wp_user->ID && wp_get_session_token()) $mgr->destroy_others(wp_get_session_token());
@@ -2856,9 +2906,9 @@ add_action('admin_init', function () {
         foreach (['۴۰ میلی‌متر', '۴۴ میلی‌متر'] as $n) {
             $wrong = nexv_cat_child_by_name($n, $iphoneS4);
             if (!$wrong) continue;
-            if (nexv_cat_child_by_name($n, $watchS4)) { $log[] = "«$n» از قبل زیرِ سری 4 اپل واچ بود؛ نسخه‌ی اشتباه دست نخورد"; continue; }
+            if (nexv_cat_child_by_name($n, $watchS4)) { $log[] = "«{$n}» از قبل زیرِ سری 4 اپل واچ بود؛ نسخه‌ی اشتباه دست نخورد"; continue; }
             wp_update_term($wrong, 'nexv_cat', ['parent' => $watchS4]);
-            $log[] = "«$n» به اپل واچ > خرید اپل واچ > سری 4 منتقل شد";
+            $log[] = "«{$n}» به اپل واچ > خرید اپل واچ > سری 4 منتقل شد";
         }
     }
     $watchS7 = nexv_cat_by_path_names('اپل واچ > خرید اپل واچ > سری 7');
@@ -2866,7 +2916,7 @@ add_action('admin_init', function () {
         foreach (['۴۱ میلی‌متر', '۴۵ میلی‌متر'] as $n) {
             if (nexv_cat_child_by_name($n, $watchS7)) continue;
             $r = wp_insert_term($n, 'nexv_cat', ['parent' => $watchS7, 'slug' => 'apple-watch-series-7-' . (strpos($n, '۴۱') !== false ? '41' : '45') . 'mm-buy']);
-            if (!is_wp_error($r)) $log[] = "«$n» زیرِ اپل واچ > خرید اپل واچ > سری 7 ساخته شد";
+            if (!is_wp_error($r)) $log[] = "«{$n}» زیرِ اپل واچ > خرید اپل واچ > سری 7 ساخته شد";
         }
     }
     $fixes = [
@@ -2880,9 +2930,9 @@ add_action('admin_init', function () {
     global $wpdb;
     foreach ($fixes as $title => $path) {
         $leaf = nexv_cat_by_path_names($path);
-        if (!$leaf) { $log[] = "دسته‌ی «$path» پیدا نشد"; continue; }
+        if (!$leaf) { $log[] = "دسته‌ی «{$path}» پیدا نشد"; continue; }
         $ids = $wpdb->get_col($wpdb->prepare("SELECT ID FROM {$wpdb->posts} WHERE post_type = 'nexv_product' AND post_title = %s AND post_status <> 'trash'", $title));
-        foreach ($ids as $pid) { wp_set_post_terms((int) $pid, [$leaf], 'nexv_cat'); $log[] = "دسته‌ی «$title» درست شد"; }
+        foreach ($ids as $pid) { wp_set_post_terms((int) $pid, [$leaf], 'nexv_cat'); $log[] = "دسته‌ی «{$title}» درست شد"; }
     }
     delete_transient('nexv_categories_cache_v1');
     delete_transient('nexv_products_cache_v2');

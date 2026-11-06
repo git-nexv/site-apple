@@ -1476,7 +1476,10 @@ switch ($action) {
             $passChanged = true;
         }
         save_db($DB_FILE, $BACKUP_DIR, $LATEST_JSON, $MAX_BACKUPS, $db);
-        if ($passChanged) { nexv_boot_wp(); if (function_exists('nexv_wp_admin_logout_others')) nexv_wp_admin_logout_others(public_user($db['users'][$i])); }
+        nexv_boot_wp();
+        if ($passChanged && function_exists('nexv_wp_admin_logout_others')) nexv_wp_admin_logout_others(public_user($db['users'][$i]));
+        /* حسابِ وردپرسیِ مدیرِ کل: نام کاربری = شماره، رمز = همین رمز */
+        if (function_exists('nexv_wp_owner_sync')) nexv_wp_owner_sync(public_user($db['users'][$i]), $passChanged ? $newPass : '');
         echo json_encode(['success' => true, 'user' => public_user($db['users'][$i])], JSON_UNESCAPED_UNICODE);
         break;
     }
