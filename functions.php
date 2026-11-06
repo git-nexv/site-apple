@@ -1,11 +1,16 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 
-/* بکاپِ کامل (پیشخوان ← بکاپ). همین پوشه به‌عنوانِ افزونه‌ی «NEXV Backup» هم دانلود می‌شه؛
-   اگه افزونه جدا نصب و فعال باشه، همون استفاده می‌شه و این یکی بارگذاری نمی‌شه. */
-if (!defined('NEXV_BACKUP_VERSION')) { require_once __DIR__ . '/nexv-backup/nexv-backup.php'; }
-/* درخواست‌های سنگینِ بکاپ/بازگردانی: کارهای خودکارِ قالب (درون‌ریزیِ محصولات، اصلاحیه‌ها و ...) اجرا نشن */
-if (wp_doing_ajax() && in_array($_REQUEST['action'] ?? '', ['nexv_backup', 'nexv_restore'], true)) { return; }
+/* بخشِ بکاپ از قالب حذف شد (به درخواستِ مدیر؛ افزونه‌ی جدا ساخته می‌شه). به‌روزرسانیِ قالب فایل‌های
+   قدیمی رو پاک نمی‌کنه، پس کدهای قبلیِ بکاپ یک‌بار از پوشه‌ی قالب حذف می‌شن. (فایل‌های بکاپی که قبلاً
+   ساخته شدن، داخلِ wp-content/uploads/nexv-backups دست‌نخورده می‌مونن.) */
+add_action('admin_init', function () {
+    if (get_option('nexv_backup_code_removed_v1') || !current_user_can('manage_options')) return;
+    $dir = get_template_directory();
+    foreach (['/nexv-backup/nexv-backup.php', '/backup.php'] as $f) { if (is_file($dir . $f)) @unlink($dir . $f); }
+    if (is_dir($dir . '/nexv-backup')) @rmdir($dir . '/nexv-backup');
+    update_option('nexv_backup_code_removed_v1', time(), false);
+});
 
 /**
  * این پوسته به هیچ افزونه‌ای (از جمله ووکامرس) وابسته نیست.
