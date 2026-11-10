@@ -391,17 +391,34 @@ if ($topbar_enabled && (trim((string) $contact_phone) !== '' || trim((string) $c
         . '<a class="nexv-topbar-item" href="' . esc_url($wa_href) . '" target="_blank" rel="noopener">' . $wa_ic . '<span>پیام در واتساپ</span></a>'
         . $ig_link
         . '</div></div>';
+    /* دکمه‌ی گردِ زبان (FA/EN) کنارِ نوار؛ هم‌قد و هم‌رنگِ خودِ نوار */
+    $topbar_html = '<div id="nexvTopRow">' . $topbar_html
+        . '<button type="button" id="nexvLangBtn" class="nexv-lang-btn" onclick="nexvToggleLang()" aria-label="English">EN</button></div>';
 
     $topbar_style .= '
         #nexvTopbar{
             /* هم‌خانواده با نوار داینامیکِ پایین: همون فاصله از لبه‌ها، همون عرضِ حداکثر و گردیِ کامل */
-            width:min(560px, calc(100vw - 20px));margin:0 auto;min-height:42px;display:flex;align-items:center;
+            width:min(560px, calc(100vw - 72px));margin:0;min-height:42px;display:flex;align-items:center;
             position:relative;overflow:hidden;border-radius:999px;font-family:"Vazirmatn",sans-serif;
             background:color-mix(in srgb, ' . esc_attr($topbar_bg) . ' 86%, transparent);
             -webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%);
             border:1px solid rgba(255,255,255,.28);
             box-shadow:inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.08), 0 8px 24px color-mix(in srgb, ' . esc_attr($topbar_bg) . ' 30%, transparent);
         }
+        #nexvTopRow{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;}
+        #nexvLangBtn{
+            flex:0 0 42px;width:42px;height:42px;border-radius:50%;cursor:pointer;padding:0;position:relative;overflow:hidden;
+            font-family:"Vazirmatn",sans-serif;font-size:12.5px;font-weight:800;letter-spacing:.5px;color:#fff;
+            background:color-mix(in srgb, ' . esc_attr($topbar_bg) . ' 86%, transparent);
+            -webkit-backdrop-filter:blur(18px) saturate(180%);backdrop-filter:blur(18px) saturate(180%);
+            border:1px solid rgba(255,255,255,.28);
+            box-shadow:inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.08), 0 8px 24px color-mix(in srgb, ' . esc_attr($topbar_bg) . ' 30%, transparent);
+            transition:transform .2s ease;
+        }
+        #nexvLangBtn::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+            background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 55%);}
+        #nexvLangBtn:hover{transform:scale(1.06);}
+        #nexvLangBtn:active{transform:scale(.95);}
         #nexvTopbar::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
             background:linear-gradient(180deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,0) 55%);}
         .nexv-topbar-inner{position:relative;width:100%;display:flex;align-items:center;justify-content:center;gap:20px;padding:6px 18px;flex-wrap:nowrap;white-space:nowrap;}
@@ -409,6 +426,9 @@ if ($topbar_enabled && (trim((string) $contact_phone) !== '' || trim((string) $c
         .nexv-topbar-item:hover{opacity:1;text-decoration:underline;}
         .nexv-topbar-item svg{width:14px;height:14px;flex-shrink:0;}
         @media (max-width:560px){
+            #nexvTopRow{gap:8px;}
+            #nexvTopbar{width:calc(100vw - 70px);}
+            #nexvLangBtn{flex-basis:38px;width:38px;height:38px;font-size:11.5px;}
             .nexv-topbar-inner{gap:14px;padding:5px 14px;}
             .nexv-topbar-item{font-size:11.5px;gap:5px;}
             .nexv-tb-label{display:none;}
