@@ -3158,14 +3158,114 @@ function normalizeSearchText(s){
     .toLowerCase();
 }
 
+/* =====================================================================
+   سرچِ هوشمند: غلطِ املایی (۱ حرف، و برای کلمه‌های بلند ۲ حرف)، چسبیده یا جدا نوشتن
+   («آیفون13پرو» = «آیفون 13 پرو»)، فارسی/انگلیسی، ارقامِ فارسی/عربی/لاتین، نیم‌فاصله و
+   خط‌تیره، و حتی تایپ با کیبوردِ انگلیسی به‌جای فارسی (مثلاً «hdtk,k» = «ایفون»).
+   نتیجه‌ها بر اساسِ نزدیکی مرتب می‌شن: تطابقِ دقیق اول، بعد تطابقِ کلمه‌ها، بعد غلط‌دارها.
+   ===================================================================== */
+const SS_SYN_GROUPS = [["آیفون", "ایفون", "iphone", "آیفن"], ["آیپد", "ایپد", "ipad"], ["اپل واچ", "اپلواچ", "apple watch"], ["واچ", "watch"], ["ایرپاد", "ایرپادز", "airpods", "airpod"], ["مک بوک", "مکبوک", "macbook"], ["آیمک", "imac"], ["پرو", "pro"], ["مکس", "max"], ["پرو مکس", "promax"], ["پلاس", "plus"], ["مینی", "mini"], ["ایر", "air"], ["اولترا", "ultra"], ["سری", "series"], ["باتری", "battery", "باطری"], ["ال سی دی", "السیدی", "lcd", "نمایشگر", "صفحه نمایش", "display", "screen"], ["تاچ", "touch"], ["مادربرد", "motherboard"], ["دوربین", "camera"], ["بدنه", "شاسی", "body", "housing", "frame"], ["فلت", "flex"], ["اسپیکر", "بلندگو", "speaker"], ["میکروفون", "microphone"], ["سوکت شارژ", "charging port"], ["شارژر", "charger"], ["کابل", "cable"], ["گلس", "glass"], ["لنز", "lens"], ["اپل", "apple"], ["اورجینال", "original"], ["کپی", "copy"]];   /* هر گروه = چند شکلِ نوشتاریِ یک کلمه */
+const SS_SYN = (()=>{ const m = {}; SS_SYN_GROUPS.forEach(g => { const n = g.map(x => ssNorm(x).replace(/ /g, '')); n.forEach(a => { m[a] = (m[a] || []).concat(n.filter(b => b !== a)); }); }); return m; })();
+const SS_SYN_FLAT = Object.keys(SS_SYN);
+function ssNorm(s){
+  return normalizeSearchText(s)
+    .replace(/[أإٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ی').replace(/ة/g, 'ه').replace(/[ءـً-ٟ]/g, '')
+    .replace(/[‌‍‎‏ ]/g, ' ')
+    .replace(/[-_\/\\|(),.:;+*'"«»؛،!?؟#&\[\]{}]/g, ' ')
+    .replace(/([0-9])([^0-9\s])/g, '$1 $2').replace(/([^0-9\s])([0-9])/g, '$1 $2')
+    .replace(/\s+/g, ' ').trim();
+}
+/* فاصله‌ی ویرایشی (با جابه‌جاییِ دو حرفِ کنارِ هم)؛ اگه از max بیشتر شد زود برمی‌گرده */
+function ssDist(a, b, max){
+  if(Math.abs(a.length - b.length) > max) return max + 1;
+  let p2 = null, p1 = Array.from({length: b.length + 1}, (_, j) => j);
+  for(let i = 1; i <= a.length; i++){
+    const cur = [i]; let rowMin = i;
+    for(let j = 1; j <= b.length; j++){
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      let v = Math.min(p1[j] + 1, cur[j-1] + 1, p1[j-1] + cost);
+      if(p2 && i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]) v = Math.min(v, p2[j-2] + 1);
+      cur[j] = v; if(v < rowMin) rowMin = v;
+    }
+    if(rowMin > max) return max + 1;
+    p2 = p1; p1 = cur;
+  }
+  return p1[b.length];
+}
+const SS_IDX = new WeakMap();
+function ssIndexOf(obj, text){
+  let ix = SS_IDX.get(obj);
+  if(ix && ix.src === text) return ix;
+  const norm = ssNorm(text);
+  const words = Array.from(new Set(norm.split(' ').filter(Boolean)));
+  ix = { src: text, norm, words, compact: words.join('') };
+  SS_IDX.set(obj, ix);
+  return ix;
+}
+function ssTokenScore(t, ix, noSplit){
+  const v = ssTokenScore1(t, ix);
+  if(v || noSplit || t.length < 5 || /[0-9]/.test(t)) return v;
+  /* دو کلمه‌ی چسبیده که توی عنوان کنارِ هم نیستن («سپرچری» → «سپر» + «چری») */
+  for(let k = 2; k <= t.length - 2; k++){
+    const a = ssTokenScore1(t.slice(0, k), ix), b = a >= 2 ? ssTokenScore1(t.slice(k), ix) : 0;
+    if(a >= 2 && b >= 2) return 1.8;
+  }
+  return 0;
+}
+function ssTokenScore1(t, ix){
+  const isNum = /^[0-9]+$/.test(t);
+  let best = 0;
+  for(const w of ix.words){
+    if(w === t) return 3;
+    if(isNum){ if(t.length >= 2 && w.startsWith(t)) best = Math.max(best, 2); continue; }
+    if(w.startsWith(t)) best = Math.max(best, t.length >= 2 ? 2.6 : 1.5);
+    else if(t.length >= 3 && w.includes(t)) best = Math.max(best, 2);
+  }
+  if(best >= 2.6 || isNum) return best;
+  if(t.length >= 3 && ix.compact.includes(t)) best = Math.max(best, 2.2);           /* «پرومکس» در «پرو مکس» */
+  for(const syn of (SS_SYN[t] || [])){ if(ix.compact.includes(syn)){ best = Math.max(best, 2.6); break; } }
+  if(best) return best;
+  const allowed = t.length >= 7 ? 2 : (t.length >= 4 ? 1 : 0);
+  if(!allowed) return 0;
+  for(const w of ix.words){
+    if(/^[0-9]+$/.test(w)) continue;
+    if(ssDist(t, w, allowed) <= allowed) return 1.6;
+    if(w.length > t.length && ssDist(t, w.slice(0, t.length), allowed) <= allowed) best = Math.max(best, 1.3);   /* نیمه‌کاره + غلط */
+  }
+  if(!best){ for(const syn of SS_SYN_FLAT){ if(syn.length >= 4 && ix.compact.includes(syn) && ssDist(t, syn, allowed) <= allowed){ best = 1.4; break; } } }   /* «ایفوم» → «ایفون» → iphone */
+  return best;
+}
+/* امتیازِ تطابقِ یک متن با عبارتِ جستجو (۰ = تطابق نداره) */
+function ssScore(obj, text, q){
+  const qn = ssNorm(q); if(!qn) return 0;
+  const ix = ssIndexOf(obj, text);
+  const toks = qn.split(' '), qc = toks.join('');
+  let s = 0;
+  if(ix.norm.includes(qn)) s += 10;
+  else if(qc.length >= 3 && ix.compact.includes(qc)) s += 8;
+  let sum = 0;
+  for(const t of toks){ const v = ssTokenScore(t, ix); if(!v) return s; sum += v; }
+  return s + sum;
+}
+/* کیبوردِ اشتباه: متنی که با کیبوردِ انگلیسی به‌جای فارسی تایپ شده (و برعکس) */
+const SS_EN = "qwertyuiop[]asdfghjkl;'zxcvbnm,`", SS_FA = 'ضصثقفغعهخحجچشسیبلاتنمکگظطزرذدپوپ';
+function ssSwapLayout(q){
+  const s = String(q || '');
+  if(/[a-z]/i.test(s) && !/[؀-ۿ]/.test(s)) return s.toLowerCase().split('').map(c => { const i = SS_EN.indexOf(c); return i >= 0 ? SS_FA[i] : c; }).join('');
+  if(/[؀-ۿ]/.test(s) && !/[a-z]/i.test(s)) return s.split('').map(c => { const i = SS_FA.indexOf(c); return i >= 0 ? SS_EN[i] : c; }).join('');
+  return '';
+}
+/* جستجو در یک لیست؛ textOf(item) متنِ قابلِ جستجوی هر آیتمه. خروجی مرتب‌شده بر اساسِ امتیاز. */
+function smartSearch(list, q, textOf){
+  const run = query => list.map(it => ({ it, s: ssScore(it, textOf(it), query) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s).map(x => x.it);
+  let out = run(q);
+  if(!out.length){ const alt = ssSwapLayout(q); if(alt) out = run(alt); }
+  return out;
+}
+
 function matchProducts(q){
-  q = normalizeSearchText(q);
-  if(!q) return [];
-  return PRODUCTS.filter(p =>
-    normalizeSearchText(p.title).includes(q) ||
-    normalizeSearchText(p.spec).includes(q) ||
-    normalizeSearchText(p.cat).includes(q)
-  );
+  if(!normalizeSearchText(q)) return [];
+  return smartSearch(PRODUCTS, q, p => [p.title, p.spec, p.cat].join(' '));
 }
 
 /* پیشنهاد بر اساس همون مدلی که مشتری سرچ کرده: اگه کالای سرچ‌شده به یک مدل خاص
@@ -3204,16 +3304,9 @@ function renderSearchModelReco(matches){
 /* برای پیشنهادهای زیرِ سرچ‌بار، به‌جای کارت کامل محصول، فقط اسمِ محصولات مشابه
    (بدون تکرار) نشون داده می‌شه؛ کلیک روش، جستجوی همون متن رو روی همه‌ی محصولات انجام می‌ده. */
 function matchProductNames(q){
-  q = normalizeSearchText(q);
-  if(!q) return [];
-  const seen = new Set();
-  const names = [];
-  PRODUCTS.forEach(p=>{
-    if(normalizeSearchText(p.title).includes(q) && !seen.has(p.title)){
-      seen.add(p.title);
-      names.push(p.title);
-    }
-  });
+  if(!normalizeSearchText(q)) return [];
+  const seen = new Set(), names = [];
+  smartSearch(PRODUCTS, q, p => p.title).forEach(p => { if(!seen.has(p.title)){ seen.add(p.title); names.push(p.title); } });
   return names.slice(0, 6);
 }
 
@@ -3241,7 +3334,7 @@ function matchCategories(q){
   }
 
   CATS
-    .filter(c => normalizeSearchText(c.name).includes(q))
+    .filter(c => normalizeSearchText(c.name).includes(q) || (q.length >= 3 && ssScore(c, c.name, q) > 0))
     .forEach(m => {
       const node = deepestMatch(m);
       push(node);
