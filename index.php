@@ -563,6 +563,9 @@ $inject .= "window.NEXV_BILLBOARDS = " . json_encode([
     'helpLink'  => $bb_wa_digits !== '' ? 'https://wa.me/' . $bb_wa_digits : '',
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) . ";\n";if ($single_product) {
     $inject .= "window.NEXV_SINGLE_PRODUCT = " . json_encode($single_product, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) . ";\n";
+    /* پیوندِ «لیست قیمت قطعاتِ همین مدل» برای صفحه‌ی محصول */
+    $nexvHub = function_exists('nexv_hub_link_for_title') ? nexv_hub_link_for_title((string) ($single_product['title'] ?? '')) : '';
+    if ($nexvHub) $inject .= "window.NEXV_HUB_LINK = " . json_encode(['url' => nexv_hub_url($nexvHub), 'label' => 'لیست قیمت همه‌ی قطعات ' . nexv_hub_models()[$nexvHub]['fa']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ";\n";
 }
 if ($cat_seo_slug) {
     $inject .= "window.NEXV_CAT_SLUG = " . json_encode($cat_seo_slug) . ";\n";
@@ -619,7 +622,9 @@ if ($is_prod) {
     $ssr = '<main id="nexvSsr"><nav>' . $crumbs . '</nav><h1>' . esc_html($p_title) . '</h1>'
          . ($p_imgs ? '<img src="' . esc_url($p_imgs[0]) . '" alt="' . esc_attr($p_title) . '" width="600" height="600">' : '')
          . ($p_desc ? '<p>' . esc_html($p_desc) . '</p>' : '')
-         . '<div>' . apply_filters('the_content', get_post_field('post_content', $qid)) . '</div></main>';
+         . '<div>' . apply_filters('the_content', get_post_field('post_content', $qid)) . '</div>'
+         . (($hubSlug = function_exists('nexv_hub_link_for_title') ? nexv_hub_link_for_title($p_title) : '') ? '<p><a href="' . esc_url(nexv_hub_url($hubSlug)) . '">لیست قیمت قطعات ' . esc_html(nexv_hub_models()[$hubSlug]['fa']) . '</a></p>' : '')
+         . '</main>';
 } elseif ($is_cat) {
     $term = get_queried_object();
     $ids = get_posts(['post_type' => 'nexv_product', 'post_status' => 'publish', 'numberposts' => 200, 'fields' => 'ids',
@@ -646,6 +651,14 @@ foreach ((is_array($nexv_tops) ? $nexv_tops : []) as $top) {
     if ($kids && !is_wp_error($kids)) foreach ($kids as $k) $links[] = [get_term_link($k), $k->name];
     if (!$links) $links[] = [get_term_link($top), $top->name];
     $groups[] = [$top->name, $links];
+}
+if (function_exists('nexv_hub_url')) {
+    $hubLinks = [];
+    foreach (['iphone-11', 'iphone-12', 'iphone-13', 'iphone-13-pro-max', 'iphone-14', 'iphone-14-pro-max', 'iphone-15', 'iphone-16'] as $hs) {
+        $hm = nexv_hub_models()[$hs] ?? null;
+        if ($hm) $hubLinks[] = [nexv_hub_url($hs), 'قیمت قطعات ' . $hm['fa']];
+    }
+    if ($hubLinks) $groups[] = ['لیست قیمت قطعات آیفون', $hubLinks];
 }
 $groups[] = ['NEXV', [[get_post_type_archive_link('nexv_article') ?: home_url('/blog/'), 'مقالات آموزشی'], [home_url('/about/'), 'درباره ما'], [home_url('/terms/'), 'قوانین و مقررات']]];
 foreach ($groups as $g) {

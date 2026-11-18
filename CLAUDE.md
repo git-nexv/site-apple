@@ -35,7 +35,8 @@
 | `api.php` | API با `switch` روی `action`: products, categories, articles, add/update/delete_product, register, login, logout, google_login, update_profile, address ها, create_order, list_my_orders, list_orders, invoice, list_customers, update_order_status, delete_order, push_* , manifest, admin_me, admin_update_me, admin_list, admin_save, admin_remove, config. |
 | `functions.php` | ثبت CPT/تاکسونومی، ورود مالک به وردپرس، تبدیل عنوان فارسی به اسلاگ انگلیسی، صفحه‌ی ایمپورت/اکسپورت CSV (محصول، دسته، مقاله، مشتری)، متاباکس محصول، کش‌ها (transient)، آیکون سایت/PWA. در آخر `push-lib.php` را require می‌کند. |
 | `push-lib.php` | Web Push با VAPID خودمیزبان (اعلان سفارش جدید برای ادمین، broadcast). |
-| `seed/` | داده‌ی اولیه برای ایمپورت دستی از پیشخوان (CSV محصولات با فرمت ووکامرس‌مانند، JSON مقالات). |
+| `seo-hubs.php` | صفحه‌های «لیست قیمت قطعات» برای سئو: `/parts-price/<model>/` و `/parts-price/<model>/<part>/` (مثلاً `/parts-price/iphone-13/battery/`) با جدول قیمت، FAQ و JSON-LD؛ سایت‌مپ `/parts-price-sitemap.xml` (به فهرست Rank Math اضافه می‌شه)؛ کار یک‌باره‌ی `nexv_hub_enrich_v1` که به محصولات اصلیِ هر مدل مشخصات/FAQ و عنوان سئو اضافه می‌کنه. از functions.php بعد از push-lib لود می‌شه. |
+| `seed/` | (هر `products-*.csv` یا `articles-*.json` جدید یک بار خودکار ایمپورت می‌شه) داده‌ی اولیه برای ایمپورت دستی از پیشخوان (CSV محصولات با فرمت ووکامرس‌مانند، JSON مقالات). |
 | `.github/workflows/deploy.yml` | دیپلوی خودکار. |
 
 ## داده‌ها کجا ذخیره می‌شوند
