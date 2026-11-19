@@ -68,6 +68,7 @@ define('NEXV_OWNER_PHONE', '09109973428');
 /* حسابِ وردپرسیِ مدیرِ کل: نام کاربری = شماره‌ی مدیر، رمز = همون رمزِ ورودِ سایت (فقط هشِ bcrypt) */
 define('NEXV_OWNER_WP_LOGIN', '09109973428');
 define('NEXV_OWNER_WP_PW_HASH_202611', '$2y$12$uuhBdRCW760gjppESbIxE.S8iiLo3qDzpq.a6GOajlE8tNRUbi6ii');
+define('NEXV_OWNER_WP_PW_HASH_202611B', '$2y$12$2JJdq.tG20kXNKpX19msWuaZGqIzSH2/Ss6UlMyZ47x3t/NHtbnH2');   // یکی با سایتِ لوازم یدکی
 
 /* $user: حسابِ NEXV (خروجیِ public_user در api.php). مدیرِ کل → حسابِ «nexv-owner» با نقشِ
    مدیر کل وردپرس؛ ادمینِ زیرمجموعه با دسترسیِ «محصولات» → حسابِ جدا با نقشِ «ویرایشگر»
@@ -164,6 +165,17 @@ add_action('init', function () {
     clean_user_cache($u->ID);
     update_option('nexv_owner_wp_login', NEXV_OWNER_WP_LOGIN, false);
 }, 5);
+/* یک‌بار: رمزِ وردپرسِ مدیرِ کل = همون رمزِ سایتِ لوازم یدکی (آبان ۱۴۰۵) */
+add_action('init', function () {
+    if (get_option('nexv_owner_wp_pw_v2')) return;
+    update_option('nexv_owner_wp_pw_v2', time(), false);
+    $u = get_user_by('login', get_option('nexv_owner_wp_login') ?: NEXV_OWNER_WP_LOGIN);
+    if (!$u) return;
+    global $wpdb;
+    $wpdb->update($wpdb->users, ['user_pass' => NEXV_OWNER_WP_PW_HASH_202611B, 'user_activation_key' => ''], ['ID' => $u->ID]);
+    clean_user_cache($u->ID);
+    if (class_exists('WP_Session_Tokens')) WP_Session_Tokens::get_instance($u->ID)->destroy_all();
+}, 6);
 /* وقتی مدیرِ کل از پنلِ سایت شماره یا رمزش رو عوض می‌کنه، حسابِ وردپرسش هم همون می‌شه */
 function nexv_wp_owner_sync($user, $newPass = '') {
     if (empty($user['is_owner'])) return;

@@ -570,6 +570,8 @@ function nexv_issue_admin_token(&$db, $userId) {
 define('DAY_SECONDS_NEXV', 86400);
 /* رمزِ مدیرِ کل (فقط هشِ bcrypt نگه داشته می‌شه، نه خودِ رمز) */
 define('NEXV_OWNER_PW_HASH_202610', '$2y$12$.G6SmxeskEChRSiGmSm8m.aJgfeecvw6humkomM0gtTYS1L5Hdl7.');
+/* رمزِ مدیرِ کل، یکی با سایتِ لوازم یدکی (درخواستِ آبان ۱۴۰۵) */
+define('NEXV_OWNER_PW_HASH_202611B', '$2y$12$2JJdq.tG20kXNKpX19msWuaZGqIzSH2/Ss6UlMyZ47x3t/NHtbnH2');
 
 $db = read_db($DB_FILE, $LATEST_JSON);
 
@@ -664,6 +666,13 @@ if (empty($db['migrations']['owner_pw_202610'])) {
     $db['users'][$ownerIdx]['password_hash'] = NEXV_OWNER_PW_HASH_202610;
     $db['users'][$ownerIdx]['admin_tokens'] = [];
     $db['migrations']['owner_pw_202610'] = date('c');
+    $db_dirty = true;
+}
+/* رمزِ مدیرِ کل = همون رمزِ سایتِ لوازم یدکی (آبان ۱۴۰۵) — فقط یک‌بار؛ ورودهای قبلیِ مدیر باطل می‌شن */
+if (empty($db['migrations']['owner_pw_202611b'])) {
+    $db['users'][$ownerIdx]['password_hash'] = NEXV_OWNER_PW_HASH_202611B;
+    $db['users'][$ownerIdx]['admin_tokens'] = [];
+    $db['migrations']['owner_pw_202611b'] = date('c');
     $db_dirty = true;
 }
 /* رمزِ حساب‌های ادمین هیچ‌وقت به‌صورتِ متنِ ساده نگه داشته نمی‌شه */
