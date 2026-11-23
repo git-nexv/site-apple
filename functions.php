@@ -2604,6 +2604,9 @@ function nexv_theme_update_page_html() {
         <?php elseif (!empty($_GET['error'])): ?>
             <div class="notice notice-error"><p>خطا در به‌روزرسانی: <?php echo esc_html(wp_unslash($_GET['error'])); ?></p></div>
         <?php endif; ?>
+        <?php $us = get_option('nexv_upd_status'); if (is_array($us)): ?>
+            <p><b>به‌روزرسانیِ خودکار (هر ۵ دقیقه):</b> <?php echo esc_html(($us['ok'] ? '✅ ' : '⚠️ ') . $us['msg']); ?> — <?php echo esc_html(human_time_diff((int) $us['time'])); ?> پیش</p>
+        <?php endif; ?>
         <p>با زدن دکمه‌ی زیر، آخرین نسخه‌ی قالب از گیت‌هاب (<code><?php echo esc_html(NEXV_UPDATE_REPO . ' / ' . NEXV_UPDATE_BRANCH); ?></code>) دانلود و جایگزین فایل‌های فعلی می‌شه.</p>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="nexv_theme_update">
@@ -2619,14 +2622,15 @@ function nexv_theme_update_page_html() {
 }
 
 /* اجرای به‌روزرسانی؛ رشته‌ی خطا یا '' در صورت موفقیت برمی‌گردونه. */
-function nexv_theme_update_run($token) {
+function nexv_theme_update_run($token, $sha = '') {
     require_once ABSPATH . 'wp-admin/includes/file.php';
+    if ($sha === '') $sha = nexv_upd_latest_sha($token);
     WP_Filesystem();
     global $wp_filesystem;
 
     $headers = ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'nexv-theme-updater'];
     if ($token !== '') $headers['Authorization'] = 'Bearer ' . $token;
-    $res = wp_remote_get('https://api.github.com/repos/' . NEXV_UPDATE_REPO . '/zipball/' . NEXV_UPDATE_BRANCH, ['headers' => $headers, 'timeout' => 120]);
+    $res = wp_remote_get('https://api.github.com/repos/' . NEXV_UPDATE_REPO . '/zipball/' . ($sha !== '' ? $sha : NEXV_UPDATE_BRANCH), ['headers' => $headers, 'timeout' => 120]);
     if (is_wp_error($res)) return $res->get_error_message();
     $code = wp_remote_retrieve_response_code($res);
     if ($code !== 200) return 'پاسخ گیت‌هاب ' . $code . ($code == 404 ? ' (اگه مخزن خصوصیه، توکن رو وارد کن)' : '');
@@ -2639,7 +2643,7 @@ function nexv_theme_update_run($token) {
     if (is_wp_error($un)) return $un->get_error_message();
 
     $dirs = glob($tmp . '/*', GLOB_ONLYDIR);
-    if (empty($dirs) || !file_exists($dirs[0] . '/style.css')) { $wp_filesystem->delete($tmp, true); return 'فایل‌های قالب در بسته پیدا نشد.'; }
+    if (empty($dirs) || !file_exists($dirs[0] . '/style.css') || !file_exists($dirs[0] . '/functions.php') || !file_exists($dirs[0] . '/index.php')) { $wp_filesystem->delete($tmp, true); return 'فایل‌های قالب در بسته پیدا نشد.'; }
     $src = $dirs[0];
     $wp_filesystem->delete($src . '/.github', true);
     $wp_filesystem->delete($src . '/README.md');
@@ -2650,8 +2654,51 @@ function nexv_theme_update_run($token) {
     delete_transient('nexv_products_cache_v2');
     delete_transient('nexv_categories_cache_v1');
     if (function_exists('opcache_reset')) @opcache_reset();
+    if ($sha !== '') update_option('nexv_theme_sha', $sha, false);
+    update_option('nexv_upd_status', ['ok' => true, 'msg' => 'به‌روزرسانی شد' . ($sha ? ' به ' . substr($sha, 0, 7) : ''), 'time' => time()], false);
     return '';
 }
+
+/* ---------- به‌روزرسانیِ خودکار هر ۵ دقیقه (مثلِ سایتِ لوازم یدکی) ----------
+   آخرین کامیتِ main چک می‌شه؛ اگه با نسخه‌ی نصب‌شده فرق داشت، خودش دانلود و جایگزین می‌شه.
+   هم با کرانِ وردپرس اجرا می‌شه و هم (اگه کرانِ هاست خاموش باشه) بعد از جواب‌دادنِ هر بازدید،
+   حداکثر هر ۵ دقیقه یک بار؛ پس حتی اگه دکمه‌ی «به‌روزرسانی سایت» رو نزنی، سایت خودش به‌روز می‌شه. */
+function nexv_upd_latest_sha($token) {
+    $headers = ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'nexv-theme-updater'];
+    if ($token !== '') $headers['Authorization'] = 'Bearer ' . $token;
+    $res = wp_remote_get('https://api.github.com/repos/' . NEXV_UPDATE_REPO . '/commits/' . NEXV_UPDATE_BRANCH, ['headers' => $headers, 'timeout' => 20]);
+    if (is_wp_error($res) || wp_remote_retrieve_response_code($res) !== 200) return '';
+    $b = json_decode(wp_remote_retrieve_body($res), true);
+    return is_array($b) && !empty($b['sha']) ? (string) $b['sha'] : '';
+}
+function nexv_upd_auto() {
+    if (get_transient('nexv_upd_lock')) return;
+    set_transient('nexv_upd_lock', 1, 600);
+    try {
+        $token = trim((string) get_option('nexv_github_token', ''));
+        $sha = nexv_upd_latest_sha($token);
+        if ($sha === '') { update_option('nexv_upd_status', ['ok' => false, 'msg' => 'آخرین نسخه از گیت‌هاب گرفته نشد (توکن رو در «به‌روزرسانی قالب» چک کن).', 'time' => time()], false); return; }
+        if ($sha === get_option('nexv_theme_sha', '')) { update_option('nexv_upd_status', ['ok' => true, 'msg' => 'به‌روزه (' . substr($sha, 0, 7) . ')', 'time' => time()], false); return; }
+        @set_time_limit(300);
+        $err = nexv_theme_update_run($token, $sha);
+        if ($err !== '') update_option('nexv_upd_status', ['ok' => false, 'msg' => $err, 'time' => time()], false);
+    } finally {
+        delete_transient('nexv_upd_lock');
+    }
+}
+add_filter('cron_schedules', function ($s) { $s['nexv_upd_5min'] = ['interval' => 300, 'display' => 'هر ۵ دقیقه']; return $s; });
+add_action('init', function () { if (!wp_next_scheduled('nexv_upd_check')) wp_schedule_event(time() + 60, 'nexv_upd_5min', 'nexv_upd_check'); });
+add_action('nexv_upd_check', function () { set_transient('nexv_upd_checked', 1, 290); nexv_upd_auto(); });
+add_action('shutdown', function () {
+    if (get_transient('nexv_upd_checked') || (defined('DOING_CRON') && DOING_CRON) || wp_doing_ajax()) return;
+    set_transient('nexv_upd_checked', 1, 300);
+    /* اول جوابِ بازدیدکننده تموم می‌شه، بعد چک انجام می‌شه تا سایت کند نشه */
+    if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
+    elseif (function_exists('litespeed_finish_request')) @litespeed_finish_request();
+    else return;   /* بدونِ امکانِ بستنِ اتصال، فقط کرانِ وردپرس چک می‌کنه */
+    @ignore_user_abort(true);
+    nexv_upd_auto();
+}, 999);
 
 add_action('admin_post_nexv_theme_update', function () {
     if (!current_user_can('manage_options')) wp_die('دسترسی غیرمجاز.');
@@ -4141,3 +4188,24 @@ add_action('init', function () {
         nexv_pl_serve_sw();
     }
 }, 0);
+
+/* پاک کردنِ فایل‌های آماده‌ی مسیرِ سریعِ api.php (لیستِ محصولات/دسته‌ها/مقاله‌ها) */
+function nexv_pub_cache_clear($which = null) {
+    static $done = [];
+    $dir = dirname(get_template_directory(), 2) . '/uploads/nexv-data/cache';
+    foreach ((array) ($which ?: ['products', 'categories', 'articles']) as $a) {
+        if (isset($done[$a])) continue;
+        $done[$a] = true;
+        @unlink($dir . '/' . $a . '.json'); @unlink($dir . '/' . $a . '.json.gz');
+    }
+}
+add_action('delete_transient_nexv_products_cache_v2', function () { nexv_pub_cache_clear(['products']); });
+add_action('delete_transient_nexv_categories_cache_v1', function () { nexv_pub_cache_clear(['products', 'categories']); });
+add_action('save_post_nexv_product', function () { nexv_pub_cache_clear(['products']); });
+add_action('save_post_nexv_article', function () { nexv_pub_cache_clear(['articles']); });
+add_action('deleted_post', function () { nexv_pub_cache_clear(); });
+add_action('trashed_post', function () { nexv_pub_cache_clear(); });
+add_action('edited_term', function () { nexv_pub_cache_clear(); });
+add_action('created_term', function () { nexv_pub_cache_clear(); });
+add_action('delete_term', function () { nexv_pub_cache_clear(); });
+add_action('updated_post_meta', function ($mid, $pid) { if (in_array(get_post_type($pid), ['nexv_product', 'nexv_article'], true)) nexv_pub_cache_clear(); }, 10, 2);

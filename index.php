@@ -538,7 +538,8 @@ if (function_exists('is_singular') && is_singular('nexv_product')) {
     }
 }
 
-$inject = "<script>\nwindow.NEXV_API_URL = " . json_encode($api_url) . ";\n";
+/* دانلودِ لیستِ محصولات همزمان با صفحه شروع می‌شه (نه بعد از اجرای جاوااسکریپت) */
+$inject = '<link rel="preload" as="fetch" crossorigin="anonymous" href="' . $api_url . '?action=products">' . "<script>\nwindow.NEXV_API_URL = " . json_encode($api_url) . ";\n";
 $inject .= "window.NEXV_HOME_URL = " . json_encode($home_url) . ";\n";
 /* کلیدِ عمومیِ اعلان‌ها (برای پرسیدنِ اجازه‌ی اعلان از بازدیدکننده‌ها) */
 $nexv_vapid_pub = function_exists('nexv_vapid') ? (nexv_vapid()['public'] ?? '') : '';

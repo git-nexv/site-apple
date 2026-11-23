@@ -45,12 +45,17 @@
 - مشتری‌ها، سفارش‌ها، ادمین‌ها: فایل JSON در `wp-content/uploads/nexv-data/` (`nexv_read_data` / `nexv_write_data`). دیپلوی به این‌ها دست نمی‌زند.
 - مهاجرت‌های یک‌باره با الگوی `if (get_option('nexv_xxx_v1')) return; ... update_option(...)` در `init` انجام می‌شود — برای تغییر جدید، نام option جدید بساز.
 
+## سرعت
+- لیستِ عمومیِ products/categories/articles در `uploads/nexv-data/cache/*.json(.gz)` ذخیره و در ابتدای api.php بدونِ بارگذاریِ وردپرس (با ETag/304) سرو می‌شه؛ با تغییرِ محصول/دسته/مقاله یا آپدیتِ قالب (`nexv_pub_cache_clear`) پاک می‌شه.
+- ارسالِ اعلانِ همگانی (`push_broadcast`) همون لحظه تأیید می‌ده و در پس‌زمینه ارسال می‌کنه (`nexv_respond_and_continue`).
+
 ## سرچ
 - `smartSearch()` در `site.html` (بعد از `normalizeSearchText`): غلط املایی، چسبیده/جدا، فارسی/انگلیسی، کیبورد اشتباه. فهرست کلمه‌های هم‌معنی در `SS_SYN_GROUPS` (مخصوص هر سایت).
 
 ## دیپلوی (مهم)
 - push روی شاخه‌ی **`main`** → GitHub Actions با FTP فایل‌ها را روی هاست می‌ریزد (secrets: `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`, `FTP_PROTOCOL`, `FTP_SERVER_DIR`).
 - push روی شاخه‌های `claude/...` **روی سایت نمی‌رود** تا وقتی که به `main` merge شود.
+- **به‌روزرسانیِ خودکار هر ۵ دقیقه** (`nexv_upd_auto` در functions.php، مثلِ updater استوک): کرانِ وردپرس + چک بعد از جواب‌دادنِ بازدیدها؛ آخرین کامیتِ `main` با `nexv_theme_sha` مقایسه و در صورتِ تفاوت نصب می‌شه (توکن: `nexv_github_token`). وضعیت در صفحه‌ی «به‌روزرسانی قالب».
 - علاوه بر FTP، دکمه‌ی «⟳ به‌روزرسانی سایت» در نوار بالای وردپرس (`nexv_theme_update_run`) با توکنِ ذخیره‌شده در NEXV ← به‌روزرسانی قالب، آخرین نسخه‌ی `main` را فوراً روی سایت می‌ریزد.
 
 ## قراردادهای پروژه
