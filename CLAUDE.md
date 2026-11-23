@@ -36,6 +36,7 @@
 | `functions.php` | ثبت CPT/تاکسونومی، ورود مالک به وردپرس، تبدیل عنوان فارسی به اسلاگ انگلیسی، صفحه‌ی ایمپورت/اکسپورت CSV (محصول، دسته، مقاله، مشتری)، متاباکس محصول، کش‌ها (transient)، آیکون سایت/PWA. در آخر `push-lib.php` را require می‌کند. |
 | `push-lib.php` | Web Push با VAPID خودمیزبان (اعلان سفارش جدید برای ادمین، broadcast). |
 | `seo-hubs.php` | صفحه‌های «لیست قیمت قطعات» برای سئو: `/parts-price/<model>/` و `/parts-price/<model>/<part>/` (مثلاً `/parts-price/iphone-13/battery/`) با جدول قیمت، FAQ و JSON-LD؛ سایت‌مپ `/parts-price-sitemap.xml` (به فهرست Rank Math اضافه می‌شه)؛ کار یک‌باره‌ی `nexv_hub_enrich_v1` که به محصولات اصلیِ هر مدل مشخصات/FAQ و عنوان سئو اضافه می‌کنه. از functions.php بعد از push-lib لود می‌شه. |
+| `seo-landing.php` | صفحه‌های فرودِ سئو (مستقل، در `parse_request`): `/nexv/` (هویتِ برند: NEXV/نکس وی)، `/iphone-parts/`، `/apple-parts/`، `/original-iphone-parts/`، `/iphone-parts-tehran/`؛ قیمتِ یک قطعه برای همه‌ی مدل‌ها `/iphone-<part>-price/` (داده از seo-hubs؛ بی‌محصول = ۴۰۴)؛ سایت‌مپ `/landing-sitemap.xml`؛ عنوانِ صفحه‌ی اصلی و `alternateName` برند در اسکیمای Rank Math. |
 | `seed/` | (هر `products-*.csv` یا `articles-*.json` جدید یک بار خودکار ایمپورت می‌شه) داده‌ی اولیه برای ایمپورت دستی از پیشخوان (CSV محصولات با فرمت ووکامرس‌مانند، JSON مقالات). |
 | `.github/workflows/deploy.yml` | دیپلوی خودکار. |
 

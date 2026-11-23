@@ -660,6 +660,10 @@ if (function_exists('nexv_hub_url')) {
     }
     if ($hubLinks) $groups[] = ['لیست قیمت قطعات آیفون', $hubLinks];
 }
+if (function_exists('nexv_lp_keyword_pages')) {
+    $groups[] = ['فروشگاه NEXV', [[home_url('/iphone-parts/'), 'قطعات آیفون'], [home_url('/apple-parts/'), 'قطعات اپل'], [home_url('/original-iphone-parts/'), 'قطعات اورجینال آیفون'], [home_url('/iphone-parts-tehran/'), 'قطعات آیفون در تهران'], [home_url('/nexv/'), 'درباره NEXV']]];
+    $groups[] = ['قیمت قطعات آیفون', [[home_url('/iphone-display-price/'), 'قیمت ال سی دی آیفون'], [home_url('/iphone-battery-price/'), 'قیمت باتری آیفون'], [home_url('/iphone-back-glass-price/'), 'قیمت شیشه پشت آیفون'], [home_url('/iphone-rear-camera-price/'), 'قیمت دوربین آیفون'], [home_url('/iphone-face-id-price/'), 'قیمت فیس آیدی آیفون'], [home_url('/iphone-motherboard-price/'), 'قیمت برد آیفون']]];
+}
 $groups[] = ['NEXV', [[get_post_type_archive_link('nexv_article') ?: home_url('/blog/'), 'مقالات آموزشی'], [home_url('/about/'), 'درباره ما'], [home_url('/terms/'), 'قوانین و مقررات']]];
 foreach ($groups as $g) {
     $foot .= '<div><h4>' . esc_html($g[0]) . '</h4><ul>';
@@ -675,6 +679,7 @@ if (function_exists('is_front_page') && is_front_page()) {
          'logo' => function_exists('nexv_logo_url') ? nexv_logo_url() : '', 'telephone' => (string) get_theme_mod('nexv_contact_phone', '09109973428')],
     ]];
     /* هرکدوم که Rank Math خودش چاپ نکرده باشه اضافه می‌شه (Organization با لوگو رو ابزارِ Rich Results گوگل تشخیص می‌ده) */
+    if (function_exists('nexv_lp_org_schema')) $site_schema['@graph'] = nexv_lp_org_schema();
     $graph = [];
     if (stripos($seo_head, '"WebSite"') === false) $graph[] = $site_schema['@graph'][0];
     if (stripos($seo_head, '"Organization"') === false || stripos($seo_head, '"logo"') === false) $graph[] = $site_schema['@graph'][1];

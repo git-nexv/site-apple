@@ -4071,6 +4071,8 @@ add_action('admin_notices', function () {
 if (file_exists(get_template_directory() . '/push-lib.php')) require_once get_template_directory() . '/push-lib.php';
 /* صفحه‌های سئوی «لیست قیمت قطعات» مدل‌های پرفروش (/parts-price/...) */
 if (file_exists(get_template_directory() . '/seo-hubs.php')) require_once get_template_directory() . '/seo-hubs.php';
+/* صفحه‌های فرودِ سئو (NEXV، قطعات آیفون، قیمتِ هر قطعه برای همه‌ی مدل‌ها) */
+if (file_exists(get_template_directory() . '/seo-landing.php')) require_once get_template_directory() . '/seo-landing.php';
 function nexv_b64u($bin) { return rtrim(strtr(base64_encode($bin), '+/', '-_'), '='); }
 function nexv_vapid() {
     $v = get_option('nexv_vapid');
