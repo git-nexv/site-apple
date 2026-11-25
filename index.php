@@ -318,7 +318,7 @@ if (function_exists('is_page') && is_page('about')) {
             <div class="about-row">
                 <div>
                     <b>آدرس</b>
-                    <span>تهران، پاکدشت، انتهای بلوار سپاه، پلاک ۱۰، طبقه ۱</span>
+                    <span><?php echo esc_html(function_exists('nexv_sender_info') ? nexv_sender_info()['address'] : get_theme_mod('nexv_contact_address', 'تهران، پاکدشت، انتهای بلوار سپاه، پلاک ۱۰، طبقه ۱')); ?></span>
                 </div>
             </div>
             <div class="about-row">

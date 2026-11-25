@@ -2139,6 +2139,18 @@ function nexv_customize_register($wp_customize) {
         'type'        => 'text',
     ]);
 
+    /* آدرسِ فروشگاه: صفحه‌ی «درباره ما» و قسمتِ «فرستنده»ی فاکتورها */
+    $wp_customize->add_setting('nexv_contact_address', [
+        'default'           => 'تهران، پاکدشت، انتهای بلوار سپاه، پلاک ۱۰، طبقه ۱',
+        'sanitize_callback' => 'sanitize_text_field',
+    ]);
+    $wp_customize->add_control('nexv_contact_address', [
+        'label'       => 'آدرس فروشگاه',
+        'description' => 'در صفحه‌ی «درباره ما» و بخشِ فرستنده‌ی فاکتورها نمایش داده می‌شه.',
+        'section'     => 'nexv_topbar',
+        'type'        => 'textarea',
+    ]);
+
     $wp_customize->add_setting('nexv_instagram_url', [
         'default'           => 'https://www.instagram.com/nexv.ir?igsh=bWRndTZ5aDQxMGFj&utm_source=qr',
         'sanitize_callback' => 'esc_url_raw',
@@ -4116,6 +4128,8 @@ add_action('admin_notices', function () {
  * - روی آیفون فقط وقتی کار می‌کنه که سایت «Add to Home Screen» شده و از همون آیکون باز بشه
  * ========================================================================= */
 if (file_exists(get_template_directory() . '/push-lib.php')) require_once get_template_directory() . '/push-lib.php';
+/* فاکتورِ فروش + اطلاعاتِ فرستنده (مشترک با صفحه‌ی «درباره ما») */
+if (file_exists(get_template_directory() . '/invoice.php')) require_once get_template_directory() . '/invoice.php';
 /* صفحه‌های سئوی «لیست قیمت قطعات» مدل‌های پرفروش (/parts-price/...) */
 if (file_exists(get_template_directory() . '/seo-hubs.php')) require_once get_template_directory() . '/seo-hubs.php';
 /* صفحه‌های فرودِ سئو (NEXV، قطعات آیفون، قیمتِ هر قطعه برای همه‌ی مدل‌ها) */
