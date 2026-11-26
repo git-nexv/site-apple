@@ -669,18 +669,14 @@ if ($ssr !== '') {
 /* ---------- فوترِ لینک‌دار + اسکیمای WebSite/Organization برای زیرلینک‌های گوگل ---------- */
 $foot = '';
 $groups = [];
-$nexv_tops = get_terms(['taxonomy' => 'nexv_cat', 'parent' => 0, 'hide_empty' => true]);
-foreach ((is_array($nexv_tops) ? $nexv_tops : []) as $top) {
-    if (is_wp_error($top)) continue;
-    $kids = get_terms(['taxonomy' => 'nexv_cat', 'parent' => $top->term_id, 'hide_empty' => true]);
-    $links = [];
-    if ($kids && !is_wp_error($kids)) foreach ($kids as $k) $links[] = [get_term_link($k), $k->name];
-    if (!$links) $links[] = [get_term_link($top), $top->name];
-    $groups[] = [$top->name, $links];
-}
+/* فوترِ جمع‌وجور: همه‌ی دسته‌ها در یک گروه (لینک‌های کوچیکِ کنارِ هم)، نه یک ستون برای هر دسته */
+$nexv_tops = get_terms(['taxonomy' => 'nexv_cat', 'parent' => 0, 'hide_empty' => true, 'orderby' => 'count', 'order' => 'DESC', 'number' => 18]);
+$nexv_cl = [];
+foreach ((is_array($nexv_tops) ? $nexv_tops : []) as $top) { if (!is_wp_error($top)) $nexv_cl[] = [get_term_link($top), $top->name]; }
+if ($nexv_cl) $groups[] = ['دسته‌بندی‌ها', $nexv_cl, 'chips'];
 if (function_exists('nexv_hub_url')) {
     $hubLinks = [];
-    foreach (['iphone-11', 'iphone-12', 'iphone-13', 'iphone-13-pro-max', 'iphone-14', 'iphone-14-pro-max', 'iphone-15', 'iphone-16'] as $hs) {
+    foreach (['iphone-11', 'iphone-12', 'iphone-13', 'iphone-14'] as $hs) {   /* فوترِ جمع‌وجور: فقط پرفروش‌ترین‌ها */
         $hm = nexv_hub_models()[$hs] ?? null;
         if ($hm) $hubLinks[] = [nexv_hub_url($hs), 'قیمت قطعات ' . $hm['fa']];
     }
@@ -688,11 +684,11 @@ if (function_exists('nexv_hub_url')) {
 }
 if (function_exists('nexv_lp_keyword_pages')) {
     $groups[] = ['فروشگاه NEXV', [[home_url('/iphone-parts/'), 'قطعات آیفون'], [home_url('/apple-parts/'), 'قطعات اپل'], [home_url('/original-iphone-parts/'), 'قطعات اورجینال آیفون'], [home_url('/iphone-parts-tehran/'), 'قطعات آیفون در تهران'], [home_url('/nexv/'), 'درباره NEXV']]];
-    $groups[] = ['قیمت قطعات آیفون', [[home_url('/iphone-display-price/'), 'قیمت ال سی دی آیفون'], [home_url('/iphone-battery-price/'), 'قیمت باتری آیفون'], [home_url('/iphone-back-glass-price/'), 'قیمت شیشه پشت آیفون'], [home_url('/iphone-rear-camera-price/'), 'قیمت دوربین آیفون'], [home_url('/iphone-face-id-price/'), 'قیمت فیس آیدی آیفون'], [home_url('/iphone-motherboard-price/'), 'قیمت برد آیفون']]];
+    $groups[] = ['قیمت قطعات آیفون', [[home_url('/iphone-display-price/'), 'قیمت ال سی دی آیفون'], [home_url('/iphone-battery-price/'), 'قیمت باتری آیفون'], [home_url('/iphone-back-glass-price/'), 'قیمت شیشه پشت آیفون'], [home_url('/iphone-rear-camera-price/'), 'قیمت دوربین آیفون']]];
 }
 $groups[] = ['NEXV', [[get_post_type_archive_link('nexv_article') ?: home_url('/blog/'), 'مقالات آموزشی'], [home_url('/about/'), 'درباره ما'], [home_url('/terms/'), 'قوانین و مقررات']]];
 foreach ($groups as $g) {
-    $foot .= '<div><h4>' . esc_html($g[0]) . '</h4><ul>';
+    $foot .= '<div' . (($g[2] ?? '') === 'chips' ? ' class="fn-chips"' : '') . '><h4>' . esc_html($g[0]) . '</h4><ul>';
     foreach ($g[1] as $l) if (!is_wp_error($l[0])) $foot .= '<li><a href="' . esc_url($l[0]) . '">' . esc_html($l[1]) . '</a></li>';
     $foot .= '</ul></div>';
 }

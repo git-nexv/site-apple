@@ -3325,11 +3325,13 @@ function nexv_static_dock_html($active = '') {
 <?php echo $d['dockCss']; ?>
 <?php echo $d['kf']; ?>
 /* مثلِ صفحه‌ی اصلی: روی موبایل کلِ صفحه ۹۰٪ (body{zoom:.9} در site.html)؛ وگرنه نوار و کارت‌ها اینجا ۱۰٪ بزرگ‌تر دیده می‌شدن */
-@media (max-width:520px){ body{zoom:0.9;} }
-.nexv-dock, .nexv-dock *, .nexv-dock *::before, .nexv-dock *::after{box-sizing:border-box; margin:0; padding:0;}
-.nexv-dock button{font-family:inherit; cursor:pointer; border:none;}
-.nexv-dock img, .nexv-dock svg{display:block;}
-.nexv-dock a{color:inherit; text-decoration:none;}
+@media (max-width:520px){ body > :not(.nexv-dock):not(#nexvBg){zoom:0.9;} }
+/* :where = بدونِ اولویت (مثلِ *{} صفحه‌ی اصلی) تا padding/margin خودِ اجزای نوار رو پاک نکنه */
+:where(.nexv-dock, .nexv-dock *, .nexv-dock *::before, .nexv-dock *::after){box-sizing:border-box; margin:0; padding:0;}
+:where(.nexv-dock button){font-family:inherit; cursor:pointer; border:none;}
+.nexv-dock{line-height:normal; font-family:'Vazirmatn', sans-serif;}   /* line-heightِ صفحه‌های مستقل روی نوار اثر نذاره */
+:where(.nexv-dock img, .nexv-dock svg){display:block;}
+:where(.nexv-dock a){color:inherit; text-decoration:none;}
 .nexv-dock .search-results{display:none !important;}
 body{padding-bottom:calc(110px + env(safe-area-inset-bottom)) !important;}
 /* پس‌زمینه‌ی ثابت و متحرکِ صفحه‌ی اصلی؛ باکس‌ها به‌صورت شیشه‌ای روش اسکرول می‌شن */
