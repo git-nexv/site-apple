@@ -707,6 +707,11 @@ if (function_exists('is_front_page') && is_front_page()) {
     if (stripos($seo_head, '"Organization"') === false || stripos($seo_head, '"logo"') === false) $graph[] = $site_schema['@graph'][1];
     if ($graph) $seo_head .= '<script type="application/ld+json">' . wp_json_encode(['@context' => 'https://schema.org', '@graph' => $graph], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
 }
+/* متاتگِ اینماد + (موقت) عنوانِ صفحه‌ی اصلی = کدِ اینماد */
+if (defined('NEXV_ENAMAD_CODE')) $seo_head = '<meta name="enamad" content="' . NEXV_ENAMAD_CODE . '" />' . $seo_head;
+if (function_exists('is_front_page') && is_front_page() && function_exists('nexv_enamad_title_active') && nexv_enamad_title_active()) {
+    $html = preg_replace('#<title>.*?</title>#su', '<title>' . NEXV_ENAMAD_CODE . '</title>', $html, 1);
+}
 $inject = $seo_head . $inject;
 $html = str_replace('<head>', "<head>\n" . $inject, $html);
 

@@ -4135,6 +4135,32 @@ add_action('admin_notices', function () {
  * - مشترک‌ها و ارسال: push-lib.php (مشترکِ همین فایل و api.php)
  * - روی آیفون فقط وقتی کار می‌کنه که سایت «Add to Home Screen» شده و از همون آیکون باز بشه
  * ========================================================================= */
+/* اینماد (enamad.ir) برای nexv.ir — کد ۲۶۱۸۷۵۹۰؛ تأیید با «فایلِ خالی در ریشه»، «متاتگ» و (موقت) «عنوان».
+   فایلِ /26187590.txt هم از وردپرس جواب داده می‌شه و هم یک‌بار به‌صورتِ فایلِ واقعیِ خالی در ریشه ساخته می‌شه. */
+define('NEXV_ENAMAD_CODE', '26187590');
+add_action('wp_loaded', function () {
+    $path = (string) parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH);
+    if ($path !== '/' . NEXV_ENAMAD_CODE . '.txt') return;
+    status_header(200);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Content-Length: 0');   /* اینماد «فایلِ خالی» می‌خواد */
+    exit;
+}, 0);
+add_action('init', function () {
+    if (get_option('nexv_enamad_file_v1') === NEXV_ENAMAD_CODE) return;
+    $f = ABSPATH . NEXV_ENAMAD_CODE . '.txt';
+    if (@file_put_contents($f, '') !== false || (is_file($f) && filesize($f) === 0)) update_option('nexv_enamad_file_v1', NEXV_ENAMAD_CODE, false);
+});
+/* یک‌بار: کشِ صفحه‌ها پاک بشه تا صفحه‌ی اصلی با عنوان/متاتگِ جدید سرو بشه */
+add_action('init', function () {
+    if (get_option('nexv_enamad_purge_v1')) return;
+    update_option('nexv_enamad_purge_v1', time(), false);
+    do_action('litespeed_purge_all');
+    if (function_exists('rocket_clean_domain')) rocket_clean_domain();
+    if (function_exists('w3tc_flush_all')) w3tc_flush_all();
+    if (function_exists('wp_cache_clear_cache')) wp_cache_clear_cache();
+    if (function_exists('wp_cache_flush')) wp_cache_flush();
+}, 99);
 if (file_exists(get_template_directory() . '/push-lib.php')) require_once get_template_directory() . '/push-lib.php';
 /* فاکتورِ فروش + اطلاعاتِ فرستنده (مشترک با صفحه‌ی «درباره ما») */
 if (file_exists(get_template_directory() . '/invoice.php')) require_once get_template_directory() . '/invoice.php';

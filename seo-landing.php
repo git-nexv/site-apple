@@ -288,7 +288,9 @@ add_action('wp_loaded', function () {
 }, 1);
 
 /* صفحه‌ی اصلی: عنوان/توضیحِ سئو + اسم‌های دیگه‌ی برند در اسکیمای Rank Math */
-function nexv_lp_home_title() { return 'NEXV (نکس وی) | فروشگاه قطعات اورجینال آیفون، آیپد و اپل واچ'; }
+/* روشِ «تغییر عنوان» اینماد: عنوانِ صفحه‌ی اصلی موقتاً دقیقاً همون کد (تا آخرِ ۹ آذر ۱۴۰۵)، بعد خودکار برمی‌گرده */
+function nexv_enamad_title_active() { return defined('NEXV_ENAMAD_CODE') && time() < strtotime('2026-11-30 23:59:59 Asia/Tehran'); }
+function nexv_lp_home_title() { return nexv_enamad_title_active() ? NEXV_ENAMAD_CODE : 'NEXV (نکس وی) | فروشگاه قطعات اورجینال آیفون، آیپد و اپل واچ'; }
 function nexv_lp_home_desc() { return 'NEXV (نکس وی)؛ خرید آنلاین قطعات اورجینال آیفون، آیپد و اپل واچ — ال سی دی، باتری، دوربین، فیس آیدی، برد و قاب — با قیمت روز، تست قبل از ارسال و ارسال سریع.'; }
 add_filter('rank_math/frontend/title', function ($t) { return (function_exists('is_front_page') && is_front_page()) ? nexv_lp_home_title() : $t; }, 100);
 add_filter('rank_math/frontend/description', function ($d) { return (function_exists('is_front_page') && is_front_page()) ? nexv_lp_home_desc() : $d; }, 100);
