@@ -19,7 +19,8 @@ if (!defined('ABSPATH')) { exit; }
    یه صفحه‌ی ساده و مستقل با همون ظاهر کلیِ سایته. */
 if (function_exists('is_singular') && is_singular('nexv_article')) {
     $aid = get_queried_object_id();
-    $atitle = get_the_title($aid);
+    $atitle = function_exists('nexv_art_display_title') ? nexv_art_display_title(get_the_title($aid)) : get_the_title($aid);
+    $aexcerpt = (string) get_post_field('post_excerpt', $aid);
     $aimg = get_the_post_thumbnail_url($aid, 'large');
     $acontent = apply_filters('the_content', get_post_field('post_content', $aid));
     ?>
@@ -28,12 +29,22 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
     <head>
         <meta charset="utf-8">
         <script>(function(){try{var t=localStorage.getItem('nexv_theme'); if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();</script>
-        <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}</style>
+        <style>html{background:#f7f6fb;}html[data-theme="dark"]{background:#08080d;}    <?php echo function_exists('nexv_art_css') ? nexv_art_css() : ''; ?>
+        </style>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <?php echo function_exists('nexv_favicon_tags') ? nexv_favicon_tags() : ''; ?>
         <title><?php echo esc_html($atitle); ?> | وبلاگ NEXV</title>
-        <meta name="description" content="<?php echo esc_attr(wp_trim_words(wp_strip_all_tags($acontent), 30)); ?>">
+        <meta name="description" content="<?php echo esc_attr($aexcerpt !== '' ? $aexcerpt : wp_trim_words(wp_strip_all_tags($acontent), 30)); ?>">
         <link rel="canonical" href="<?php echo esc_url(get_permalink($aid)); ?>">
+        <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+        <meta property="og:type" content="article"><meta property="og:title" content="<?php echo esc_attr($atitle); ?>"><meta property="og:url" content="<?php echo esc_url(get_permalink($aid)); ?>">
+        <script type="application/ld+json"><?php echo wp_json_encode(['@context' => 'https://schema.org', '@graph' => [
+            ['@type' => 'Article', 'headline' => $atitle, 'description' => $aexcerpt, 'datePublished' => get_the_date('c', $aid), 'dateModified' => get_the_modified_date('c', $aid),
+             'mainEntityOfPage' => get_permalink($aid), 'inLanguage' => 'fa-IR', 'author' => ['@type' => 'Organization', 'name' => 'NEXV'], 'publisher' => ['@id' => home_url('/#organization')]],
+            ['@type' => 'BreadcrumbList', 'itemListElement' => [
+                ['@type' => 'ListItem', 'position' => 1, 'name' => 'NEXV', 'item' => home_url('/')],
+                ['@type' => 'ListItem', 'position' => 2, 'name' => 'مقالات', 'item' => home_url('/blog/')],
+                ['@type' => 'ListItem', 'position' => 3, 'name' => $atitle, 'item' => get_permalink($aid)]]]]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?></script>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'">
@@ -64,6 +75,8 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
             <?php if ($aimg): ?><img class="cover" src="<?php echo esc_url($aimg); ?>" alt="<?php echo esc_attr($atitle); ?>"><?php endif; ?>
             <h1><?php echo esc_html($atitle); ?></h1>
             <div class="body-content"><?php echo $acontent; ?></div>
+            <?php /* قطعاتِ مرتبط با همین مقاله (مدل + نوعِ قطعه) و مقاله‌های مرتبط */
+            if (function_exists('nexv_art_related_html')) { echo nexv_art_related_html($aid); echo nexv_art_more_html($aid); } ?>
         </div>
         <?php echo nexv_static_dock_html(); ?>
     </body>
@@ -76,7 +89,10 @@ if (function_exists('is_singular') && is_singular('nexv_article')) {
    آدرس: nexv.ir/blog — همه‌ی مقالاتِ منتشرشده رو به‌شکلِ کارتی نشون می‌ده؛
    هر کارت به پیوندِ یکتای (انگلیسیِ) خودِ همون مقاله می‌ره. */
 if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_article')) {
-    $arts = get_posts(['post_type' => 'nexv_article', 'posts_per_page' => -1, 'post_status' => 'publish']);
+    /* صفحه‌بندی (با زیاد شدنِ مقاله‌ها): /blog/?pg=2 */
+    $nx_pg = max(1, (int) ($_GET['pg'] ?? 1));
+    $nx_pages = max(1, (int) ceil(((int) (wp_count_posts('nexv_article')->publish ?? 0)) / 30));
+    $arts = get_posts(['post_type' => 'nexv_article', 'posts_per_page' => 30, 'paged' => $nx_pg, 'post_status' => 'publish']);
     ?>
     <!DOCTYPE html>
     <html lang="fa" dir="rtl">
@@ -129,12 +145,15 @@ if (function_exists('is_post_type_archive') && is_post_type_archive('nexv_articl
                 <a class="blog-card" href="<?php echo esc_url(get_permalink($a)); ?>">
                     <?php if ($img): ?><img src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr(get_the_title($a)); ?>"><?php endif; ?>
                     <div class="b">
-                        <h3><?php echo esc_html(get_the_title($a)); ?></h3>
+                        <h3><?php echo esc_html(function_exists('nexv_art_display_title') ? nexv_art_display_title(get_the_title($a)) : get_the_title($a)); ?></h3>
                         <p><?php echo esc_html($excerpt); ?></p>
                     </div>
                 </a>
                 <?php endforeach; ?>
             </div>
+            <?php if ($nx_pages > 1): ?><nav style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:22px">
+                <?php for ($i = 1; $i <= $nx_pages; $i++): ?><a href="<?php echo esc_url($i > 1 ? add_query_arg('pg', $i, home_url('/blog/')) : home_url('/blog/')); ?>" style="min-width:34px;text-align:center;padding:6px 10px;border-radius:10px;text-decoration:none;<?php echo $i === $nx_pg ? 'background:#6a4dff;color:#fff' : 'background:#fff;color:#201f2b'; ?>"><?php echo esc_html(nexv_hub_fa_digits($i)); ?></a><?php endfor; ?>
+            </nav><?php endif; ?>
         </div>
         <?php echo nexv_static_dock_html(); ?>
     </body>

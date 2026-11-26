@@ -4134,6 +4134,8 @@ if (file_exists(get_template_directory() . '/invoice.php')) require_once get_tem
 if (file_exists(get_template_directory() . '/seo-hubs.php')) require_once get_template_directory() . '/seo-hubs.php';
 /* صفحه‌های فرودِ سئو (NEXV، قطعات آیفون، قیمتِ هر قطعه برای همه‌ی مدل‌ها) */
 if (file_exists(get_template_directory() . '/seo-landing.php')) require_once get_template_directory() . '/seo-landing.php';
+/* مقاله‌ها: محصولاتِ مرتبط زیرِ مقاله + تولیدِ روزانه‌ی ساعتِ ۱۶ */
+if (file_exists(get_template_directory() . '/articles-engine.php')) require_once get_template_directory() . '/articles-engine.php';
 function nexv_b64u($bin) { return rtrim(strtr(base64_encode($bin), '+/', '-_'), '='); }
 function nexv_vapid() {
     $v = get_option('nexv_vapid');

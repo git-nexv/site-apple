@@ -213,7 +213,7 @@ function nexv_wp_articles() {
     if (!function_exists('get_posts')) { return null; }
     $posts = get_posts([
         'post_type'      => 'nexv_article',
-        'posts_per_page' => -1,
+        'posts_per_page' => 40,   /* فقط ۴۰ مقاله‌ی آخر؛ با تولیدِ روزانه تعداد زیاد می‌شه */
         'post_status'    => 'publish',
         'orderby'        => 'date',
         'order'          => 'DESC',
