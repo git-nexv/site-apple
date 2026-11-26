@@ -85,6 +85,7 @@ header{
 }
 .nav{display:flex; align-items:center; justify-content:space-between; height:78px; gap:20px; padding:0;}
 .brand{display:flex; align-items:center; gap:10px; font-size:22px; font-weight:800; letter-spacing:.5px;}
+.brand-logo{width:34px; height:34px; border-radius:9px; flex:none; display:block;}
 .brand .dot{width:9px; height:9px; border-radius:50%; background:var(--accent); box-shadow:0 0 14px var(--accent); animation:pulse 2.4s ease-in-out infinite;}
 @keyframes pulse{0%,100%{opacity:1; transform:scale(1);}50%{opacity:.55; transform:scale(1.3);}}
 .nav-links{display:flex; gap:30px; font-size:15px; color:var(--text-dim);}
@@ -1457,6 +1458,23 @@ img.hx-dev.on{filter:none;}
 .hx-rim{border-radius:var(--cr);}
 .hx-halo{inset:-10% -6%;}
 .hx-shadow{width:70%; margin-top:18px;}
+/* لوگو + اسمِ سایت زیرِ پوسترهای صفحه‌ی اصلی: کپسولِ شیشه‌ای مثلِ نوارِ پایین (وسط)، با حالتِ شب */
+.hx-brand{align-self:center; display:flex; align-items:center; gap:12px; margin:16px auto 0; padding:9px 18px 9px 9px; border-radius:22px;
+  direction:ltr; text-decoration:none; color:var(--text);
+  background:color-mix(in srgb, var(--glass-solid) 70%, transparent);
+  -webkit-backdrop-filter:blur(24px) saturate(190%); backdrop-filter:blur(24px) saturate(190%);
+  border:1px solid var(--glass-edge);
+  box-shadow:var(--glass-hl, inset 0 1px 0 rgba(255,255,255,.6)), 0 12px 32px rgba(20,10,60,.12), 0 2px 6px rgba(20,10,60,.06);
+  transition:transform .3s cubic-bezier(.3,1.35,.5,1), box-shadow .3s ease;}
+[data-theme="dark"] .hx-brand{box-shadow:var(--glass-hl, inset 0 1px 0 rgba(255,255,255,.06)), 0 16px 40px rgba(0,0,0,.5);}
+.hx-brand:hover{transform:translateY(-2px);}
+.hx-brand:active{transform:scale(.97);}
+.hx-brand-ic{width:52px; height:52px; border-radius:15px; flex:none; display:block; box-shadow:0 6px 16px rgba(0,0,0,.22);}
+.hx-brand-tx{display:flex; flex-direction:column; line-height:1.15; text-align:left;}
+.hx-brand-tx b{font-family:'Vazirmatn', system-ui, sans-serif; font-size:25px; font-weight:800; letter-spacing:-.4px;}
+.hx-brand-tx b i{font-style:normal; background:linear-gradient(135deg, #a58fff, var(--accent)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.hx-brand-tx small{direction:rtl; text-align:left; font-size:12px; font-weight:600; color:var(--text-dim); margin-top:3px; letter-spacing:0;}
+@media (max-width:520px){ .hx-brand{margin-top:12px; padding:7px 15px 7px 7px; gap:10px; border-radius:19px;} .hx-brand-ic{width:44px; height:44px; border-radius:13px;} .hx-brand-tx b{font-size:21px;} .hx-brand-tx small{font-size:11px;} }
 
 .hx-poster{
   position:absolute; inset:2.5px; border-radius:calc(var(--cr) - 2.5px); overflow:hidden; isolation:isolate;
@@ -1901,7 +1919,7 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
 
 <header>
   <div class="wrap nav">
-    <div class="brand logotype"><span class="dot"></span>NEXV</div>
+    <div class="brand logotype"><img class="brand-logo" src="{{LOGO_URL}}" alt="" width="34" height="34">NEXV</div>
     <nav class="nav-links">
       <a href="#products">محصولات</a>
       <a href="#features">ویژگی‌ها</a>
@@ -1938,6 +1956,11 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
         </div>
       </div>
       <div class="hx-shadow" aria-hidden="true"></div>
+      <!-- لوگو و اسمِ سایت زیرِ پوسترها (وسط) تا کاربر همون اول برند رو ببینه -->
+      <a class="hx-brand hx-in" style="--d:.95s" href="/nexv/" aria-label="نکسوی | NEXV">
+        <img class="hx-brand-ic" src="{{LOGO_URL}}" alt="" width="52" height="52" decoding="async">
+        <span class="hx-brand-tx"><b dir="ltr"><span>nexv</span><i>.ir</i></b><small>نکسوی · فروشگاه قطعات اپل</small></span>
+      </a>
     </div>
 
     <div class="hx-copy">
@@ -2085,7 +2108,7 @@ body{ animation:nexvEnter .38s var(--ease-out) both; }
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <div class="brand logotype" style="margin-bottom:14px;"><span class="dot"></span>NEXV</div>
+        <div class="brand logotype" style="margin-bottom:14px;"><img class="brand-logo" src="{{LOGO_URL}}" alt="" width="34" height="34">NEXV</div>
         <p><b>NEXV</b> (نکس وی) فروشگاه اینترنتی <a href="/apple-parts/">قطعات اپل</a> و <a href="/iphone-parts/">قطعات آیفون</a>ه؛ <a href="/iphone-display-price/">ال سی دی</a>، <a href="/iphone-battery-price/">باتری</a> و سایر قطعات اورجینال آیفون، آیپد و اپل واچ با قیمت روز.</p>
         <p>با عشق کنار مشتری‌هامون هستیم؛ از انتخاب تا بعد از خرید، محصولات اورجینال اپل با گارانتی واقعی و پشتیبانی صمیمانه، همیشه در دسترستون.</p>
       </div>

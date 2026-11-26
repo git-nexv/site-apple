@@ -3207,7 +3207,7 @@ add_action('admin_init', function () {
 /* =========================================================================
  * لوگوی سایت (logo.png در پوشه‌ی قالب) — برای صفحه‌های مستقل و آیکونِ تب
  * ========================================================================= */
-define('NEXV_ICON_VER', '20261101');
+define('NEXV_ICON_VER', '20261126');   /* لوگوی N (آذر ۱۴۰۵) */
 /* آیکون‌های سایت در پوشه‌ی icons قالب (از نسخه‌ی ۴۰۹۶ پیکسلی، با کیفیتِ کامل کوچیک شدن) */
 function nexv_icon_url($file) { return get_template_directory_uri() . '/icons/' . $file . '?v=' . NEXV_ICON_VER; }
 function nexv_logo_url() { return get_template_directory_uri() . '/logo.png?v=' . NEXV_ICON_VER; }

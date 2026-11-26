@@ -375,6 +375,8 @@ $nexv_icon_tags .= '<link rel="manifest" href="' . esc_url(get_template_director
     . '<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="NEXV">'
     . '<meta name="apple-mobile-web-app-status-bar-style" content="default">';
 $html = preg_replace('#</head>#i', $nexv_icon_tags . '</head>', $html, 1);
+/* لوگوی سایت (هدر، فوتر و برندِ زیرِ پوسترها) */
+$html = str_replace('{{LOGO_URL}}', esc_url(function_exists('nexv_logo_url') ? nexv_logo_url() : get_template_directory_uri() . '/logo.png'), $html);
 $api_url = esc_url(get_template_directory_uri() . '/api.php');
 $home_url = esc_url_raw(home_url('/'));
 
