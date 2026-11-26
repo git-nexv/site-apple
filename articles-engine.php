@@ -223,13 +223,16 @@ add_action('init', function () { if (!wp_next_scheduled('nexv_art_daily')) wp_sc
 add_action('nexv_art_daily', function () { nexv_art_run_batch(); });
 add_action('shutdown', function () {
     $now = new DateTime('now', new DateTimeZone('Asia/Tehran'));
-    if ((int) $now->format('G') < 16) return;
+    /* شروعِ اولیه: یک‌بار ۳۰ مقاله همون اول (منتظرِ ساعتِ ۱۶ نمی‌مونه) */
+    $boot = !get_option('nexv_art_boot_v1');
+    if (!$boot && (int) $now->format('G') < 16) return;
     $last = (array) get_option('nexv_art_last', []);
-    if (($last['date'] ?? '') === $now->format('Y-m-d') || get_transient('nexv_art_lock') || get_transient('nexv_art_tried')) return;
+    if ((!$boot && ($last['date'] ?? '') === $now->format('Y-m-d')) || get_transient('nexv_art_lock') || get_transient('nexv_art_tried')) return;
     set_transient('nexv_art_tried', 1, 600);
     if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
     elseif (function_exists('litespeed_finish_request')) @litespeed_finish_request();
     elseif (!is_admin()) return;
     @ignore_user_abort(true);
+    if ($boot) update_option('nexv_art_boot_v1', time(), false);
     nexv_art_run_batch();
 }, 998);
