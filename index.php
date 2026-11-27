@@ -355,6 +355,8 @@ if (function_exists('is_page') && is_page('about')) {
                 <a href="<?php echo esc_url($wa_href); ?>" target="_blank" rel="noopener">واتساپ</a>
                 <?php if ($ig): ?><a href="<?php echo esc_url($ig); ?>" target="_blank" rel="noopener">اینستاگرام</a><?php endif; ?>
             </div>
+            <!-- نماد اعتماد الکترونیکی (اینماد) — کد بدون تغییر -->
+            <div style="text-align:center;margin-top:18px"><a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8932852&Code=EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8932852&Code=EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ' alt='' style='cursor:pointer' code='EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ'></a></div>
 
             <a class="about-back" onclick="try{if(document.referrer&&new URL(document.referrer).origin===location.origin&&history.length>1){history.back();return false;}}catch(e){}" href="<?php echo esc_url(home_url('/')); ?>">← بازگشت به فروشگاه</a>
         </div>
@@ -692,6 +694,8 @@ foreach ($groups as $g) {
     foreach ($g[1] as $l) if (!is_wp_error($l[0])) $foot .= '<li><a href="' . esc_url($l[0]) . '">' . esc_html($l[1]) . '</a></li>';
     $foot .= '</ul></div>';
 }
+/* نماد اعتماد الکترونیکی (اینماد) پایین فوتر — کد اینماد بدون تغییر */
+$foot .= '<div class="fn-seal">' . "<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=8932852&Code=EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=8932852&Code=EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ' alt='' style='cursor:pointer' code='EYh0pvZw8RcVR1LcEVoVMgD2mQIaCKfZ'></a>" . '</div>';
 $html = str_replace('<!--NEXV_FOOT_LINKS-->', '<nav class="foot-nav" aria-label="لینک‌های اصلی سایت">' . $foot . '</nav>', $html);
 if (function_exists('is_front_page') && is_front_page()) {
     $site_schema = ['@context' => 'https://schema.org', '@graph' => [
